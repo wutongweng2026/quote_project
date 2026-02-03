@@ -1,14 +1,13 @@
+
 // --- TYPES ---
 interface PriceDataItem { [model: string]: number; }
 interface Prices { [category: string]: PriceDataItem; }
-interface Discount { label: string; rate: number; }
 interface TieredDiscount { id: number; threshold: number; rate: number; }
 interface MarginOption { label: string; value: number; }
 interface PriceData {
     settings: { margin: number; };
     marginOptions: MarginOption[];
     prices: Prices;
-    discounts: Discount[];
     tieredDiscounts: TieredDiscount[];
     lastUpdated?: string | null;
 }
@@ -33,7 +32,6 @@ interface AppState {
     customItems: CustomItem[];
     newCategory: string;
     specialDiscount: number;
-    discountRate: number;
     selectedMargin: number;
     adminSearchTerm: string;
     pendingFile: File | null;
@@ -61,10 +59,6 @@ const PRICE_DATA: PriceData = {
     "电源": { "300W": 0, "500W": 200 },
     "主机": { "TSK-C3 I5-13400": 2800, "TSK-C3 I5-14400": 3100, "TSK-C3 I5-14500": 3200, "TSK-C3 I7-13700": 4550, "TSK-C3 I7-14700": 5450, "TSK-C3 I9-14900": 5550, "TSK-C4 Ultra5-235": 3300, "TSK-C4 Ultra7-265": 4550 }
   },
-  "discounts": [
-    { "label": "无折扣 (1.0)", "rate": 1.0 },
-    { "label": "批量折扣 (0.99)", "rate": 0.99 }
-  ],
   "tieredDiscounts": [
     { "id": 1721360183321, "threshold": 10, "rate": 0.99 }
   ]
@@ -92,7 +86,6 @@ const state: AppState = {
     customItems: [],
     newCategory: '',
     specialDiscount: 0,
-    discountRate: PRICE_DATA.discounts[0]?.rate || 1.0,
     selectedMargin: PRICE_DATA.settings.margin,
     adminSearchTerm: '',
     pendingFile: null,
@@ -181,7 +174,7 @@ function renderQuoteTool() {
     return `
         <div class="quoteContainer">
             <header class="quoteHeader">
-                <h1>产品报价系统 <span>v1.01 -- 龙盛科技</span></h1>
+                <h1>产品报价系统 <span>v1.01 - 龙盛科技</span></h1>
                 <div class="header-actions">
                     <span class="update-timestamp">${formattedDate}</span>
                     <button class="admin-button" id="app-view-toggle-btn">${state.isLoggedIn ? '后台管理' : '后台登录'}</button>
@@ -226,10 +219,8 @@ function renderQuoteTool() {
 
                 <div class="controls-grid">
                     <div class="control-group">
-                        <label for="discount-select">折扣选择:</label>
-                        <select id="discount-select">
-                            ${state.priceData.discounts.map(d => `<option value="${d.rate}" ${state.discountRate === d.rate ? 'selected' : ''}>${d.label}</option>`).join('')}
-                        </select>
+                        <label>应用折扣:</label>
+                        <div class="discount-display">${totals.appliedDiscountLabel}</div>
                     </div>
                     <div class="control-group">
                         <label for="margin-select">点位选择:</label>
@@ -307,7 +298,7 @@ function renderAddCategoryRow() {
         <tr id="add-category-row">
             <td class="config-row-label">添加新类别</td>
             <td>
-                <input type="text" id="new-category-input" placeholder="在此输入类别名称 (例如: 机箱)" value="${state.newCategory}" />
+                <input type="text" id="new-category-input" placeholder="在此输入类别名称 (例如: 配件)" value="${state.newCategory}" />
             </td>
             <td></td>
             <td class="config-row-action">
@@ -340,18 +331,19 @@ function renderAdminPanel() {
             <h3 class="admin-section-header">1. 核心计算参数与折扣</h3>
             <div class="admin-section-body">
                 <div class="margin-options-section">
-                    <label style="display: block; font-weight: 500; margin-bottom: 0.5rem;">预留加价倍率设置 (选择默认值):</label>
+                    <label style="display: block; font-weight: 500; margin-bottom: 0.5rem;">预留加价率设置 (选择默认值):</label>
                     <div id="margin-options-list">
                     ${(state.priceData.marginOptions || []).map((opt, index) => `
                         <div class="margin-option-row" data-index="${index}">
                             <input type="radio" name="default-margin" class="margin-default-radio" value="${opt.value}" ${state.priceData.settings.margin === opt.value ? 'checked' : ''} />
                             <input type="text" class="margin-label-input" value="${opt.label}" placeholder="标签" />
-                            <input type="number" step="0.01" class="margin-value-input" value="${opt.value}" placeholder="倍率" />
+                            <input type="number" step="1" class="margin-value-input" value="${Math.round((opt.value - 1) * 100)}" placeholder="例如: 15" />
+                            <span>%</span>
                             <button class="remove-margin-btn">删除</button>
                         </div>
                     `).join('')}
                     </div>
-                    <button id="add-margin-btn" class="add-margin-btn">+ 添加倍率</button>
+                    <button id="add-margin-btn" class="add-margin-btn">+ 添加加价率</button>
                 </div>
                 <div class="tiered-discount-section">
                     <label style="display: block; font-weight: 500; margin-bottom: 0.5rem;">N件N折阶梯价设置:</label>
@@ -359,14 +351,14 @@ function renderAdminPanel() {
                     ${(state.priceData.tieredDiscounts || []).map(tier => `
                         <div class="tier-row" data-tier-id="${tier.id}">
                             <span>满</span> <input type="number" class="tier-threshold" value="${tier.threshold}" placeholder="数量" /> <span>件, 打</span>
-                            <input type="number" class="tier-rate" step="0.01" value="${tier.rate}" placeholder="折扣" /> <span>折</span>
+                            <input type="number" class="tier-rate" step="1" value="${Math.round(tier.rate * 100)}" placeholder="例如: 99" /> <span>折</span>
                             <button class="remove-tier-btn">删除</button>
                         </div>
                     `).join('')}
                     </div>
                     <button id="add-tier-btn" class="add-tier-btn">+ 添加阶梯</button>
                 </div>
-                 <button id="save-params-btn" class="admin-save-section-btn">保存倍率与阶梯折扣</button>
+                 <button id="save-params-btn" class="admin-save-section-btn">保存参数与折扣</button>
             </div>
         </div>
 
@@ -404,7 +396,7 @@ function renderAdminPanel() {
             <h3 class="admin-section-header" style="background-color: #6b7280;">4. 现有数据维护</h3>
             <div class="admin-section-body">
                 <input type="search" id="admin-search-input" placeholder="输入型号或分类名称搜索..." value="${state.adminSearchTerm}" />
-                <div style="max-height: 400px; overflow-y: auto;">
+                <div id="admin-data-table-container" style="max-height: 400px; overflow-y: auto;">
                     <table class="admin-data-table">
                         <thead><tr><th>分类</th><th>型号</th><th>单价</th><th>操作</th></tr></thead>
                         <tbody>
@@ -468,8 +460,24 @@ function calculateTotals() {
     }, 0);
     
     const costTotal = standardCost + customCost;
+
+    const standardItems = Object.values(state.selection).filter(item => item.model && item.quantity > 0);
+    const customItems = state.customItems.filter(item => item.model && item.quantity > 0);
+    const totalQuantity = [...standardItems, ...customItems].reduce((acc, { quantity }) => acc + quantity, 0);
+
+    const sortedTiers = [...state.priceData.tieredDiscounts].sort((a, b) => b.threshold - a.threshold);
+    let appliedRate = 1.0;
+    let appliedDiscountLabel = '无折扣 (1.0)';
+
+    const applicableTier = sortedTiers.find(tier => tier.threshold > 0 && totalQuantity >= tier.threshold);
+
+    if (applicableTier) {
+        appliedRate = applicableTier.rate;
+        appliedDiscountLabel = `满 ${applicableTier.threshold} 件, 打 ${applicableTier.rate} 折`;
+    }
+
     const priceBeforeDiscount = costTotal * state.selectedMargin;
-    let finalPrice = priceBeforeDiscount * state.discountRate - state.specialDiscount;
+    let finalPrice = priceBeforeDiscount * appliedRate - state.specialDiscount;
     
     finalPrice = Math.max(0, finalPrice);
 
@@ -490,7 +498,7 @@ function calculateTotals() {
         }
     }
 
-    return { finalPrice: finalPrice };
+    return { finalPrice, appliedRate, appliedDiscountLabel };
 }
 
 function getFinalConfigText() {
@@ -607,7 +615,7 @@ function handleExportExcel() {
     rows.push([]); 
     rows.push(['', '', '', '总成本', costTotal.toString()]);
     rows.push(['', '', '', '点位', String(state.selectedMargin)]);
-    rows.push(['', '', '', '折扣', state.discountRate.toString()]);
+    rows.push(['', '', '', '折扣', totals.appliedRate.toString()]);
     rows.push(['', '', '', '特别立减', state.specialDiscount.toString()]);
     rows.push(['', '', '', '最终报价', totals.finalPrice.toString()]);
 
@@ -771,7 +779,6 @@ function addEventListeners() {
             state.customItems = [];
             state.newCategory = '';
             state.specialDiscount = 0;
-            state.discountRate = 1.0;
             state.selectedMargin = state.priceData.settings.margin;
             render();
         } else if (button && button.classList.contains('remove-item-btn') && row) {
@@ -826,16 +833,33 @@ function addEventListeners() {
         } else if (button && button.id === 'quick-add-btn') {
             let category = ($('#quick-add-category') as HTMLSelectElement).value;
             if (category === '--new--') category = ($('#quick-add-new-category') as HTMLInputElement).value.trim();
-            const model = ($('#quick-add-model') as HTMLInputElement).value.trim();
-            const price = parseFloat(($('#quick-add-price') as HTMLInputElement).value);
-            if (category && model && !isNaN(price)) {
-                if (!state.priceData.prices[category]) state.priceData.prices[category] = {};
-                state.priceData.prices[category][model] = price;
-                updateTimestamp();
-                render();
-            } else { 
-                showModal({ title: '输入错误', message: '请确保分类、型号和价格都已正确填写。' });
+            const modelInput = ($('#quick-add-model') as HTMLInputElement);
+            const priceInput = ($('#quick-add-price') as HTMLInputElement);
+            const model = modelInput.value.trim();
+            const priceStr = priceInput.value.trim();
+            const price = parseFloat(priceStr);
+
+            if (!category || category === '--new--' && !category) {
+                showModal({ title: '输入错误', message: '请选择或输入一个有效的分类。' });
+                return;
             }
+            if (!model) {
+                showModal({ title: '输入错误', message: '请输入型号名称。' });
+                return;
+            }
+            if (priceStr === '' || isNaN(price)) {
+                showModal({ title: '输入错误', message: '请输入有效的成本单价。' });
+                return;
+            }
+
+            if (!state.priceData.prices[category]) state.priceData.prices[category] = {};
+            state.priceData.prices[category][model] = price;
+            updateTimestamp();
+            
+            modelInput.value = '';
+            priceInput.value = '';
+            modelInput.focus();
+            render();
         } else if (button && button.classList.contains('admin-save-item-btn') && row) {
             const { category, model } = row.dataset;
             const newPrice = parseFloat((row.querySelector('.price-input') as HTMLInputElement).value);
@@ -867,14 +891,14 @@ function addEventListeners() {
                 });
             }
         } else if (button && button.id === 'add-tier-btn') {
-            state.priceData.tieredDiscounts.push({ id: Date.now(), threshold: 0, rate: 0 });
+            state.priceData.tieredDiscounts.push({ id: Date.now(), threshold: 0, rate: 0.99 });
             render();
         } else if (button && button.classList.contains('remove-tier-btn') && tierRow) {
             const tierId = Number(tierRow.dataset.tierId);
             state.priceData.tieredDiscounts = state.priceData.tieredDiscounts.filter(t => t.id !== tierId);
             render();
         } else if (button && button.id === 'add-margin-btn') {
-            state.priceData.marginOptions.push({ label: '新倍率', value: 1.0 });
+            state.priceData.marginOptions.push({ label: '新倍率', value: 1.15 });
             render();
         } else if (button && button.classList.contains('remove-margin-btn') && marginRow) {
             const index = parseInt(marginRow.dataset.index!, 10);
@@ -937,14 +961,35 @@ function addEventListeners() {
         const tierRow = target.closest<HTMLElement>('.tier-row');
         
         if (target.id === 'new-category-input') { state.newCategory = target.value; return; }
-        if (target.id === 'admin-search-input') { state.adminSearchTerm = target.value; render(); return; }
+        
+        if (target.id === 'admin-search-input') {
+            const searchValue = target.value;
+            const selectionStart = target.selectionStart;
+            const selectionEnd = target.selectionEnd;
+            const scrollContainer = $('#admin-data-table-container');
+            const scrollTop = scrollContainer ? scrollContainer.scrollTop : 0;
+
+            state.adminSearchTerm = searchValue;
+            render();
+
+            const newSearchInput = $('#admin-search-input') as HTMLInputElement;
+            if (newSearchInput) {
+                newSearchInput.focus();
+                newSearchInput.setSelectionRange(selectionStart, selectionEnd);
+            }
+            const newScrollContainer = $('#admin-data-table-container');
+            if (newScrollContainer) {
+                newScrollContainer.scrollTop = scrollTop;
+            }
+            return;
+        }
 
         if (tierRow) {
             const tierId = Number(tierRow.dataset.tierId);
             const tier = state.priceData.tieredDiscounts.find(t => t.id === tierId);
             if (!tier) return;
             if (target.classList.contains('tier-threshold')) tier.threshold = Number(target.value);
-            if (target.classList.contains('tier-rate')) tier.rate = Number(target.value);
+            if (target.classList.contains('tier-rate')) tier.rate = Number(target.value) / 100;
             return;
         }
 
@@ -979,8 +1024,8 @@ function addEventListeners() {
             const oldValue = option.value;
             
             option.label = (marginRow.querySelector('.margin-label-input') as HTMLInputElement).value;
-            const newValue = parseFloat((marginRow.querySelector('.margin-value-input') as HTMLInputElement).value);
-            option.value = isNaN(newValue) ? 0 : newValue;
+            const percentage = parseFloat((marginRow.querySelector('.margin-value-input') as HTMLInputElement).value);
+            option.value = isNaN(percentage) ? 1 : (1 + percentage / 100);
 
             if (state.priceData.settings.margin === oldValue) {
                 state.priceData.settings.margin = option.value;
@@ -994,8 +1039,6 @@ function addEventListeners() {
         } else if (row && row.dataset.customId) {
             const item = state.customItems.find(i => i.id === Number(row.dataset.customId));
             if (item && target.classList.contains('custom-model-select')) { item.model = (target as HTMLSelectElement).value; render(); }
-        } else if (target.id === 'discount-select') {
-            state.discountRate = Number((target as HTMLSelectElement).value); render();
         } else if (target.id === 'margin-select') {
             state.selectedMargin = Number((target as HTMLSelectElement).value); render();
         }

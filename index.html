@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>产品报价系统 v1.01 -- 龙盛科技</title>
+    <title>产品报价系统 v1.01 - 龙盛科技</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
@@ -162,6 +162,16 @@
         }
         .controls-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.75rem; margin-top: 1.5rem; background: #f9fafb; padding: 1rem; border-radius: 8px; }
         .control-group label { display: block; margin-bottom: 0.25rem; font-size: 0.9rem; }
+        .discount-display {
+            padding: 0.6rem 0.75rem;
+            border-radius: 6px;
+            border: 1px solid var(--border-color);
+            background: #f0fdf4;
+            color: var(--primary-color-hover);
+            font-size: 1rem;
+            text-align: center;
+            font-weight: 500;
+        }
         .quoteFooter {
             padding: 1rem 1.5rem;
             display: flex;
@@ -228,7 +238,8 @@
         .adminForm { display: flex; align-items: center; gap: 1rem; }
         .adminForm label { font-weight: 500; white-space: nowrap; }
         .admin-margin-input, .admin-margin-select { max-width: 150px; }
-        .quick-add-form, .import-form { display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap; }
+        .quick-add-form { display: flex; gap: 0.75rem; align-items: center; }
+        .import-form { display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap; }
         .quick-add-form > *, .import-form > * { flex-shrink: 0; }
         .quick-add-form select { flex-grow: 1; min-width: 120px; }
         .quick-add-form input { flex-grow: 2; min-width: 150px; }
