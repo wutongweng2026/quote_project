@@ -340,7 +340,7 @@ function renderAdminPanel() {
                     <div id="margin-options-list">
                     ${(state.priceData.marginOptions || []).map((opt, index) => `
                         <div class="margin-option-row" data-index="${index}">
-                            <input type="radio" name="default-margin" class="margin-default-radio" value="${opt.value}" ${state.priceData.settings.margin === opt.value ? 'checked' : ''} />
+                            <input type="radio" name="default-margin" class="margin-default-radio" value="${opt.value}" ${state.priceData!.settings.margin === opt.value ? 'checked' : ''} />
                             <input type="text" class="margin-label-input" value="${opt.label}" placeholder="标签" />
                             <input type="number" step="0.01" class="margin-value-input" value="${opt.value}" placeholder="倍率" />
                             <button class="remove-margin-btn">删除</button>
