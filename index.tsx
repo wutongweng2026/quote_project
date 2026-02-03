@@ -39,6 +39,8 @@ const state = {
     discountRate: 1.0,
     adminSearchTerm: '',
     pendingFile: null,
+    showLoginModal: false,
+    loginError: null,
 };
 
 // --- DOM SELECTORS ---
@@ -53,9 +55,30 @@ function render() {
     } else if (state.view === 'admin') {
         html = renderAdminPanel();
     }
+
+    if (state.showLoginModal) {
+        html += renderLoginModal();
+    }
+
     appContainer.innerHTML = html;
-    addEventListeners();
 }
+
+function renderLoginModal() {
+    return `
+        <div class="modal-overlay" id="modal-overlay">
+            <div class="modal-content">
+                <h2>管理员登录</h2>
+                <input type="password" id="password-input" class="modal-input" placeholder="请输入密码" autofocus />
+                <div class="modal-error">${state.loginError || ''}</div>
+                <div class="modal-buttons">
+                    <button class="modal-cancel-btn" id="modal-cancel-btn">取消</button>
+                    <button class="modal-confirm-btn" id="modal-confirm-btn">确定</button>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
 
 function renderQuoteTool() {
     const totals = calculateTotals();
@@ -65,7 +88,7 @@ function renderQuoteTool() {
         <div class="quoteContainer">
             <header class="quoteHeader">
                 <h1>产品报价系统 <span>v1.01 -- 龙盛科技</span></h1>
-                <button class="admin-button" id="admin-login-btn">${state.isLoggedIn ? '后台管理' : '后台登录'}</button>
+                <button class="admin-button" id="app-view-toggle-btn">${state.isLoggedIn ? '后台管理' : '后台登录'}</button>
             </header>
 
             <main class="quoteBody">
@@ -411,35 +434,64 @@ function handleFileSelect(event) {
     state.pendingFile = file;
 }
 
+function handleLogin() {
+    const passwordInput = ($('#password-input'));
+    const password = passwordInput.value;
+    if (password === '112@') {
+        state.isLoggedIn = true;
+        state.showLoginModal = false;
+        state.loginError = null;
+        state.view = 'admin';
+        render();
+    } else {
+        state.loginError = '密码错误！';
+        render();
+        passwordInput.focus();
+    }
+}
+
 function addEventListeners() {
     appContainer.addEventListener('click', (e) => {
-        const target = e.target.closest('button');
+        const target = e.target;
         if (!target) return;
-
+        
+        const button = target.closest('button');
         const row = target.closest('tr');
         const tierRow = target.closest('.tier-row');
 
-        if (target.id === 'admin-login-btn') {
-            if (state.isLoggedIn) { state.view = 'admin'; render(); } 
-            else {
-                const pass = prompt('请输入管理员密码:');
-                if (pass === '112@') { state.isLoggedIn = true; state.view = 'admin'; render(); } 
-                else if (pass) { alert('密码错误！'); }
+        if (target.id === 'modal-overlay' || (button && button.id === 'modal-cancel-btn')) {
+             state.showLoginModal = false;
+             state.loginError = null;
+             render();
+             return;
+        }
+
+        if (!button) return;
+
+        if (button.id === 'app-view-toggle-btn') {
+            if (state.isLoggedIn) {
+                state.view = 'admin';
+                render();
+            } else {
+                state.showLoginModal = true;
+                render();
             }
-        } else if (target.id === 'back-to-quote-btn') {
+        } else if (button.id === 'modal-confirm-btn') {
+            handleLogin();
+        } else if (button.id === 'back-to-quote-btn') {
             state.view = 'quote'; render();
-        } else if (target.id === 'reset-btn') {
+        } else if (button.id === 'reset-btn') {
             state.selection = getInitialSelection();
             state.customItems = [];
             state.newCategory = '';
             state.specialDiscount = 0;
             state.discountRate = 1.0;
             render();
-        } else if (target.classList.contains('remove-item-btn') && row) {
+        } else if (button.classList.contains('remove-item-btn') && row) {
             const category = row.dataset.category;
             if(category) state.selection[category] = getInitialSelection()[category];
             render();
-        } else if (target.id === 'add-category-btn') {
+        } else if (button.id === 'add-category-btn') {
             if (state.newCategory.trim()) {
                 const newCat = state.newCategory.trim();
                  if (!state.customItems.some(item => item.category === newCat)) {
@@ -447,21 +499,21 @@ function addEventListeners() {
                 }
                 state.newCategory = ''; render();
             }
-        } else if (target.classList.contains('remove-custom-item-btn') && row) {
+        } else if (button.classList.contains('remove-custom-item-btn') && row) {
             state.customItems = state.customItems.filter(item => item.id !== Number(row.dataset.customId));
             render();
-        } else if (target.id === 'match-config-btn') {
+        } else if (button.id === 'match-config-btn') {
             handleMatchConfig();
-        } else if (target.id === 'generate-quote-btn') {
+        } else if (button.id === 'generate-quote-btn') {
             handleGenerateQuoteText();
-        } else if (target.id === 'save-config-btn') {
+        } else if (button.id === 'save-config-btn') {
             const dataStr = JSON.stringify(state.priceData, null, 2);
             const blob = new Blob([dataStr], {type: "application/json"});
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url; a.download = 'prices_data.json'; a.click();
             URL.revokeObjectURL(url);
-        } else if (target.id === 'quick-add-btn') {
+        } else if (button.id === 'quick-add-btn') {
             let category = $('#quick-add-category').value;
             if (category === '--new--') category = $('#quick-add-new-category').value.trim();
             const model = $('#quick-add-model').value.trim();
@@ -471,31 +523,31 @@ function addEventListeners() {
                 state.priceData.prices[category][model] = price;
                 render();
             } else { alert('请确保分类、型号和价格都已正确填写。'); }
-        } else if (target.classList.contains('admin-save-item-btn') && row) {
+        } else if (button.classList.contains('admin-save-item-btn') && row) {
             const { category, model } = row.dataset;
             const newPrice = parseFloat(row.querySelector('.price-input').value);
             if (!isNaN(newPrice)) {
                 state.priceData.prices[category][model] = newPrice;
-                target.style.backgroundColor = '#16a34a';
-                setTimeout(() => { target.style.backgroundColor = ''; }, 1000);
+                button.style.backgroundColor = '#16a34a';
+                setTimeout(() => { button.style.backgroundColor = ''; }, 1000);
             }
-        } else if (target.classList.contains('admin-delete-item-btn') && row) {
+        } else if (button.classList.contains('admin-delete-item-btn') && row) {
             const { category, model } = row.dataset;
             if (confirm(`确定要删除 "${category} - ${model}" 吗？`)) {
                 delete state.priceData.prices[category][model];
                 if (Object.keys(state.priceData.prices[category]).length === 0) delete state.priceData.prices[category];
                 render();
             }
-        } else if (target.id === 'add-tier-btn') {
+        } else if (button.id === 'add-tier-btn') {
             state.priceData.tieredDiscounts.push({ id: Date.now(), threshold: 0, rate: 0 });
             render();
-        } else if (target.classList.contains('remove-tier-btn') && tierRow) {
+        } else if (button.classList.contains('remove-tier-btn') && tierRow) {
             const tierId = Number(tierRow.dataset.tierId);
             state.priceData.tieredDiscounts = state.priceData.tieredDiscounts.filter(t => t.id !== tierId);
             render();
-        } else if (target.id === 'save-params-btn') {
+        } else if (button.id === 'save-params-btn') {
             alert('参数已在输入时自动保存，可直接下载全部配置。');
-        } else if (target.id === 'import-btn') {
+        } else if (button.id === 'import-btn') {
             if (state.pendingFile) {
                 const reader = new FileReader();
                 reader.onload = (e) => {
@@ -584,7 +636,16 @@ function addEventListeners() {
             state.discountRate = Number(target.value); render();
         }
     });
+
+    // Add keydown listener for the modal
+    appContainer.addEventListener('keydown', (e) => {
+        if (state.showLoginModal && e.key === 'Enter') {
+            e.preventDefault();
+            handleLogin();
+        }
+    });
 }
 
 // --- INITIALIZATION ---
+addEventListeners();
 render();
