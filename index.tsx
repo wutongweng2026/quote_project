@@ -451,7 +451,7 @@ function calculateTotals() {
     const standardCost = Object.entries(state.selection).reduce((acc, [category, { model, quantity }]) => {
         if (model && quantity > 0) {
             const dataCategory = category.startsWith('硬盘') ? '硬盘' : category;
-            const cost = state.priceData?.prices[dataCategory]?.[model] ?? 0;
+            const cost = state.priceData!.prices[dataCategory]?.[model] ?? 0;
             return acc + (cost * quantity);
         }
         return acc;
@@ -459,7 +459,7 @@ function calculateTotals() {
 
     const customCost = state.customItems.reduce((acc, item) => {
         if (item.model && item.quantity > 0) {
-            const cost = state.priceData?.prices[item.category]?.[item.model] ?? 0;
+            const cost = state.priceData!.prices[item.category]?.[item.model] ?? 0;
             return acc + (cost * item.quantity);
         }
         return acc;
@@ -510,7 +510,7 @@ function handleMatchConfig() {
 
     // 1. Prepare data
     const newSelection = getInitialSelection();
-    const allModels = Object.entries(state.priceData?.prices ?? {})
+    const allModels = Object.entries(state.priceData!.prices)
         .flatMap(([category, models]) =>
             Object.keys(models).map(model => ({
                 model,
@@ -597,7 +597,7 @@ function handleExportExcel() {
     allItems.forEach(([category, { model, quantity }]) => {
         if (model && quantity > 0) {
             const dataCategory = category.startsWith('硬盘') ? '硬盘' : category;
-            const cost = state.priceData?.prices[dataCategory]?.[model] ?? 0;
+            const cost = state.priceData!.prices[dataCategory]?.[model] ?? 0;
             const subtotal = cost * quantity;
             costTotal += subtotal;
             rows.push([category, model, cost.toString(), quantity.toString(), subtotal.toString()]);
@@ -774,7 +774,7 @@ function addEventListeners() {
             state.newCategory = '';
             state.specialDiscount = 0;
             state.discountRate = 1.0;
-            state.selectedMargin = state.priceData?.settings.margin ?? null;
+            state.selectedMargin = state.priceData!.settings.margin;
             render();
         } else if (button && button.classList.contains('remove-item-btn') && row) {
             const category = row.dataset.category;
@@ -797,9 +797,9 @@ function addEventListeners() {
             handleExportExcel();
         } else if (button && button.id === 'export-all-prices-btn') {
             const rows = [['分类', '型号', '单价']];
-            const sortedCategories = Object.keys(state.priceData?.prices ?? {}).sort();
+            const sortedCategories = Object.keys(state.priceData!.prices).sort();
             for (const category of sortedCategories) {
-                const models = state.priceData?.prices?.[category];
+                const models = state.priceData!.prices[category];
                 if (models) {
                     const sortedModels = Object.keys(models).sort();
                     for (const model of sortedModels) {
@@ -831,8 +831,8 @@ function addEventListeners() {
             const model = ($('#quick-add-model') as HTMLInputElement).value.trim();
             const price = parseFloat(($('#quick-add-price') as HTMLInputElement).value);
             if (category && model && !isNaN(price)) {
-                if (!state.priceData.prices[category]) state.priceData.prices[category] = {};
-                state.priceData.prices[category][model] = price;
+                if (!state.priceData!.prices[category]) state.priceData!.prices[category] = {};
+                state.priceData!.prices[category][model] = price;
                 updateTimestamp();
                 render();
             } else { 
@@ -842,8 +842,8 @@ function addEventListeners() {
             const { category, model } = row.dataset;
             const newPrice = parseFloat((row.querySelector('.price-input') as HTMLInputElement).value);
             if (category && model && !isNaN(newPrice)) {
-                if (state.priceData?.prices?.[category]) {
-                    state.priceData.prices[category][model] = newPrice;
+                if (state.priceData!.prices[category]) {
+                    state.priceData!.prices[category][model] = newPrice;
                     updateTimestamp();
                     button.style.backgroundColor = '#16a34a';
                     setTimeout(() => { button.style.backgroundColor = ''; }, 1000);
@@ -860,8 +860,8 @@ function addEventListeners() {
                     confirmText: '删除',
                     onConfirm: () => {
                         if(state.priceData?.prices?.[category]) {
-                            delete state.priceData.prices[category][model];
-                            if (Object.keys(state.priceData.prices[category]).length === 0) delete state.priceData.prices[category];
+                            delete state.priceData!.prices[category][model];
+                            if (Object.keys(state.priceData!.prices[category]).length === 0) delete state.priceData!.prices[category];
                             updateTimestamp();
                             render();
                         }
@@ -869,7 +869,7 @@ function addEventListeners() {
                 });
             }
         } else if (button && button.id === 'add-tier-btn') {
-            state.priceData?.tieredDiscounts.push({ id: Date.now(), threshold: 0, rate: 0 });
+            state.priceData!.tieredDiscounts.push({ id: Date.now(), threshold: 0, rate: 0 });
             render();
         } else if (button && button.classList.contains('remove-tier-btn') && tierRow) {
             const tierId = Number(tierRow.dataset.tierId);
@@ -878,12 +878,12 @@ function addEventListeners() {
             }
             render();
         } else if (button && button.id === 'add-margin-btn') {
-            state.priceData?.marginOptions.push({ label: '新倍率', value: 1.0 });
+            state.priceData!.marginOptions.push({ label: '新倍率', value: 1.0 });
             render();
         } else if (button && button.classList.contains('remove-margin-btn') && marginRow) {
             const index = parseInt(marginRow.dataset.index!, 10);
-            const wasDefault = state.priceData?.marginOptions[index].value === state.priceData?.settings.margin;
-            state.priceData?.marginOptions.splice(index, 1);
+            const wasDefault = state.priceData!.marginOptions[index].value === state.priceData!.settings.margin;
+            state.priceData!.marginOptions.splice(index, 1);
             if (state.priceData) {
                 if (wasDefault && state.priceData.marginOptions.length > 0) {
                     state.priceData.settings.margin = state.priceData.marginOptions[0].value;
@@ -948,7 +948,7 @@ function addEventListeners() {
 
         if (tierRow) {
             const tierId = Number(tierRow.dataset.tierId);
-            const tier = state.priceData?.tieredDiscounts.find(t => t.id === tierId);
+            const tier = state.priceData!.tieredDiscounts.find(t => t.id === tierId);
             if (!tier) return;
             if (target.classList.contains('tier-threshold')) tier.threshold = Number(target.value);
             if (target.classList.contains('tier-rate')) tier.rate = Number(target.value);
@@ -984,7 +984,7 @@ function addEventListeners() {
             }
         } else if (marginRow && (target.classList.contains('margin-label-input') || target.classList.contains('margin-value-input'))) {
             const index = parseInt(marginRow.dataset.index!, 10);
-            const option = state.priceData?.marginOptions[index];
+            const option = state.priceData!.marginOptions[index];
             if (!option) return;
             const oldValue = option.value;
             
