@@ -3,10 +3,7 @@
 interface PriceDataItem { [model: string]: number; }
 interface Prices { [category: string]: PriceDataItem; }
 interface TieredDiscount { id: number; threshold: number; rate: number; }
-interface MarginOption { label: string; value: number; }
 interface PriceData {
-    settings: { margin: number; };
-    marginOptions: MarginOption[];
     prices: Prices;
     tieredDiscounts: TieredDiscount[];
     lastUpdated?: string | null;
@@ -32,7 +29,7 @@ interface AppState {
     customItems: CustomItem[];
     newCategory: string;
     specialDiscount: number;
-    selectedMargin: number;
+    markupPoints: number;
     adminSearchTerm: string;
     pendingFile: File | null;
     showLoginModal: boolean;
@@ -43,14 +40,6 @@ interface AppState {
 
 // --- DATA (Embedded) & CONFIG ---
 const PRICE_DATA: PriceData = {
-  "settings": {
-    "margin": 1.15
-  },
-  "marginOptions": [
-    { "label": "标准 (1.15)", "value": 1.15 },
-    { "label": "中等 (1.20)", "value": 1.2 },
-    { "label": "较高 (1.30)", "value": 1.3 }
-  ],
   "prices": {
     "内存": { "8G DDR5 5600": 750, "16G DDR5 5600": 1650 },
     "硬盘": { "512G SSD": 600, "1T SSD": 1100, "2T SATA": 800 },
@@ -86,7 +75,7 @@ const state: AppState = {
     customItems: [],
     newCategory: '',
     specialDiscount: 0,
-    selectedMargin: PRICE_DATA.settings.margin,
+    markupPoints: 15,
     adminSearchTerm: '',
     pendingFile: null,
     showLoginModal: false,
@@ -223,10 +212,11 @@ function renderQuoteTool() {
                         <div class="discount-display">${totals.appliedDiscountLabel}</div>
                     </div>
                     <div class="control-group">
-                        <label for="margin-select">点位选择:</label>
-                        <select id="margin-select">
-                            ${state.priceData.marginOptions.map(opt => `<option value="${opt.value}" ${state.selectedMargin === opt.value ? 'selected' : ''}>${opt.label}</option>`).join('')}
-                        </select>
+                         <label for="markup-points-input">点位:</label>
+                        <div class="points-input-group">
+                           <input type="number" id="markup-points-input" value="${state.markupPoints}" placeholder="例如: 15" />
+                           <span>点</span>
+                        </div>
                     </div>
                     <div class="control-group">
                         <label for="special-discount-input">特别立减:</label>
@@ -309,7 +299,6 @@ function renderAddCategoryRow() {
 }
 
 function renderAdminPanel() {
-    const allCategories = Object.keys(state.priceData.prices);
     const searchTerm = (state.adminSearchTerm || '').toLowerCase();
     const filteredPriceEntries = Object.entries(state.priceData.prices)
         .map(([category, models]) => {
@@ -330,21 +319,6 @@ function renderAdminPanel() {
         <div class="admin-section">
             <h3 class="admin-section-header">1. 核心计算参数与折扣</h3>
             <div class="admin-section-body">
-                <div class="margin-options-section">
-                    <label style="display: block; font-weight: 500; margin-bottom: 0.5rem;">预留加价率设置 (选择默认值):</label>
-                    <div id="margin-options-list">
-                    ${(state.priceData.marginOptions || []).map((opt, index) => `
-                        <div class="margin-option-row" data-index="${index}">
-                            <input type="radio" name="default-margin" class="margin-default-radio" value="${opt.value}" ${state.priceData.settings.margin === opt.value ? 'checked' : ''} />
-                            <input type="text" class="margin-label-input" value="${opt.label}" placeholder="标签" />
-                            <input type="number" step="1" class="margin-value-input" value="${Math.round((opt.value - 1) * 100)}" placeholder="例如: 15" />
-                            <span>%</span>
-                            <button class="remove-margin-btn">删除</button>
-                        </div>
-                    `).join('')}
-                    </div>
-                    <button id="add-margin-btn" class="add-margin-btn">+ 添加加价率</button>
-                </div>
                 <div class="tiered-discount-section">
                     <label style="display: block; font-weight: 500; margin-bottom: 0.5rem;">N件N折阶梯价设置:</label>
                     <div id="tier-list">
@@ -358,7 +332,6 @@ function renderAdminPanel() {
                     </div>
                     <button id="add-tier-btn" class="add-tier-btn">+ 添加阶梯</button>
                 </div>
-                 <button id="save-params-btn" class="admin-save-section-btn">保存参数与折扣</button>
             </div>
         </div>
 
@@ -366,11 +339,7 @@ function renderAdminPanel() {
             <h3 class="admin-section-header" style="background-color: #3b82f6;">2. 快速录入配件</h3>
             <div class="admin-section-body">
                 <div class="quick-add-form">
-                     <select id="quick-add-category">
-                        ${allCategories.map(cat => `<option value="${cat}">${cat}</option>`).join('')}
-                        <option value="--new--">-- 添加新分类 --</option>
-                     </select>
-                     <input type="text" id="quick-add-new-category" style="display:none;" placeholder="新分类名" />
+                     <input type="text" id="quick-add-category-input" placeholder="分类" />
                      <input type="text" id="quick-add-model" placeholder="型号名称" />
                      <input type="number" id="quick-add-price" placeholder="成本单价" />
                      <button id="quick-add-btn">确认添加</button>
@@ -467,7 +436,7 @@ function calculateTotals() {
 
     const sortedTiers = [...state.priceData.tieredDiscounts].sort((a, b) => b.threshold - a.threshold);
     let appliedRate = 1.0;
-    let appliedDiscountLabel = '无折扣 (1.0)';
+    let appliedDiscountLabel = '无折扣';
 
     const applicableTier = sortedTiers.find(tier => tier.threshold > 0 && totalQuantity >= tier.threshold);
 
@@ -476,12 +445,11 @@ function calculateTotals() {
         appliedDiscountLabel = `满 ${applicableTier.threshold} 件, 打 ${applicableTier.rate} 折`;
     }
 
-    const priceBeforeDiscount = costTotal * state.selectedMargin;
+    const priceBeforeDiscount = costTotal * (1 + state.markupPoints / 100);
     let finalPrice = priceBeforeDiscount * appliedRate - state.specialDiscount;
     
     finalPrice = Math.max(0, finalPrice);
 
-    // Apply custom rounding logic as per user request
     if (finalPrice > 0) {
         const intPrice = Math.floor(finalPrice);
         const lastTwoDigits = intPrice % 100;
@@ -490,11 +458,11 @@ function calculateTotals() {
             const basePrice = Math.floor(intPrice / 100) * 100;
             if (lastTwoDigits > 50) {
                 finalPrice = basePrice + 99;
-            } else { // This covers numbers where last two digits are 1-50
+            } else { 
                 finalPrice = basePrice + 50;
             }
         } else {
-            finalPrice = intPrice; // If ends in .00, just take the integer part
+            finalPrice = intPrice;
         }
     }
 
@@ -517,7 +485,6 @@ function handleMatchConfig() {
     const input = ($('#matcher-input') as HTMLInputElement).value;
     if (!input) return;
 
-    // 1. Prepare data
     const newSelection = getInitialSelection();
     const allModels = Object.entries(state.priceData.prices)
         .flatMap(([category, models]) =>
@@ -531,7 +498,6 @@ function handleMatchConfig() {
 
     let processedInput = input;
 
-    // 2. Handle Hard Drive '+' case specifically
     const plusIndex = processedInput.indexOf('+');
     if (plusIndex > -1) {
         const components = processedInput.split(/[\\/|]/);
@@ -554,7 +520,6 @@ function handleMatchConfig() {
         }
     }
 
-    // 3. Main loop for all other components
     let tempInput = processedInput.toLowerCase();
     const hddFillOrder = ['硬盘1', '硬盘2'];
 
@@ -614,7 +579,7 @@ function handleExportExcel() {
 
     rows.push([]); 
     rows.push(['', '', '', '总成本', costTotal.toString()]);
-    rows.push(['', '', '', '点位', String(state.selectedMargin)]);
+    rows.push(['', '', '', '点位', String(state.markupPoints)]);
     rows.push(['', '', '', '折扣', totals.appliedRate.toString()]);
     rows.push(['', '', '', '特别立减', state.specialDiscount.toString()]);
     rows.push(['', '', '', '最终报价', totals.finalPrice.toString()]);
@@ -742,7 +707,6 @@ function addEventListeners() {
         const button = target.closest('button');
         const row = target.closest<HTMLTableRowElement>('tr');
         const tierRow = target.closest<HTMLElement>('.tier-row');
-        const marginRow = target.closest<HTMLElement>('.margin-option-row');
 
         if (target.id === 'modal-overlay' || target.id === 'custom-modal-overlay') {
              state.showLoginModal = false;
@@ -779,7 +743,7 @@ function addEventListeners() {
             state.customItems = [];
             state.newCategory = '';
             state.specialDiscount = 0;
-            state.selectedMargin = state.priceData.settings.margin;
+            state.markupPoints = 15;
             render();
         } else if (button && button.classList.contains('remove-item-btn') && row) {
             const category = row.dataset.category;
@@ -831,35 +795,45 @@ function addEventListeners() {
                 document.body.removeChild(link);
             }
         } else if (button && button.id === 'quick-add-btn') {
-            let category = ($('#quick-add-category') as HTMLSelectElement).value;
-            if (category === '--new--') category = ($('#quick-add-new-category') as HTMLInputElement).value.trim();
+            const categoryInput = ($('#quick-add-category-input') as HTMLInputElement);
             const modelInput = ($('#quick-add-model') as HTMLInputElement);
             const priceInput = ($('#quick-add-price') as HTMLInputElement);
+            
+            const category = categoryInput.value.trim();
             const model = modelInput.value.trim();
             const priceStr = priceInput.value.trim();
             const price = parseFloat(priceStr);
 
-            if (!category || category === '--new--' && !category) {
-                showModal({ title: '输入错误', message: '请选择或输入一个有效的分类。' });
-                return;
-            }
-            if (!model) {
-                showModal({ title: '输入错误', message: '请输入型号名称。' });
-                return;
-            }
-            if (priceStr === '' || isNaN(price)) {
-                showModal({ title: '输入错误', message: '请输入有效的成本单价。' });
-                return;
+            if (!category) { showModal({ title: '输入错误', message: '请输入分类。' }); return; }
+            if (!model) { showModal({ title: '输入错误', message: '请输入型号名称。' }); return; }
+            if (priceStr === '' || isNaN(price)) { showModal({ title: '输入错误', message: '请输入有效的成本单价。' }); return; }
+
+            const itemExists = state.priceData.prices[category]?.[model] !== undefined;
+
+            const performAddOrUpdate = () => {
+                if (!state.priceData.prices[category]) state.priceData.prices[category] = {};
+                state.priceData.prices[category][model] = price;
+                updateTimestamp();
+                
+                categoryInput.value = '';
+                modelInput.value = '';
+                priceInput.value = '';
+                categoryInput.focus();
+                render();
+            };
+
+            if (itemExists) {
+                showModal({
+                    title: '确认更新',
+                    message: `配件 "${category} - ${model}" 已存在，是否要将其价格更新为 ${price}？`,
+                    showCancel: true,
+                    confirmText: '更新',
+                    onConfirm: performAddOrUpdate
+                });
+            } else {
+                performAddOrUpdate();
             }
 
-            if (!state.priceData.prices[category]) state.priceData.prices[category] = {};
-            state.priceData.prices[category][model] = price;
-            updateTimestamp();
-            
-            modelInput.value = '';
-            priceInput.value = '';
-            modelInput.focus();
-            render();
         } else if (button && button.classList.contains('admin-save-item-btn') && row) {
             const { category, model } = row.dataset;
             const newPrice = parseFloat((row.querySelector('.price-input') as HTMLInputElement).value);
@@ -897,21 +871,6 @@ function addEventListeners() {
             const tierId = Number(tierRow.dataset.tierId);
             state.priceData.tieredDiscounts = state.priceData.tieredDiscounts.filter(t => t.id !== tierId);
             render();
-        } else if (button && button.id === 'add-margin-btn') {
-            state.priceData.marginOptions.push({ label: '新倍率', value: 1.15 });
-            render();
-        } else if (button && button.classList.contains('remove-margin-btn') && marginRow) {
-            const index = parseInt(marginRow.dataset.index!, 10);
-            const wasDefault = state.priceData.marginOptions[index].value === state.priceData.settings.margin;
-            state.priceData.marginOptions.splice(index, 1);
-            if (wasDefault && state.priceData.marginOptions.length > 0) {
-                state.priceData.settings.margin = state.priceData.marginOptions[0].value;
-            } else if (state.priceData.marginOptions.length === 0) {
-                state.priceData.settings.margin = 1.0;
-            }
-            render();
-        } else if (button && button.id === 'save-params-btn') {
-            showModal({ title: '提示', message: '参数已在输入时自动保存，\n可直接通过最下方的绿色按钮导出全部价格。' });
         } else if (button && button.id === 'import-btn') {
             if (state.pendingFile) {
                 const file = state.pendingFile;
@@ -990,6 +949,7 @@ function addEventListeners() {
             if (!tier) return;
             if (target.classList.contains('tier-threshold')) tier.threshold = Number(target.value);
             if (target.classList.contains('tier-rate')) tier.rate = Number(target.value) / 100;
+            updateTimestamp(); // Auto-save on change
             return;
         }
 
@@ -1005,42 +965,23 @@ function addEventListeners() {
             }
         } else if (target.id === 'special-discount-input') {
             state.specialDiscount = Math.max(0, Number(target.value)); render();
+        } else if (target.id === 'markup-points-input') {
+            state.markupPoints = Math.max(0, Number(target.value)); render();
         }
     });
     
     appContainer.addEventListener('change', (e) => {
         const target = e.target as HTMLInputElement | HTMLSelectElement;
         const row = target.closest<HTMLTableRowElement>('tr');
-        const marginRow = target.closest<HTMLElement>('.margin-option-row');
 
         if (target.id === 'import-file-input') { handleFileSelect(e as unknown as Event); return; }
         
-        if (target.classList.contains('margin-default-radio')) {
-            state.priceData.settings.margin = Number((target as HTMLInputElement).value);
-        } else if (marginRow && (target.classList.contains('margin-label-input') || target.classList.contains('margin-value-input'))) {
-            const index = parseInt(marginRow.dataset.index!, 10);
-            const option = state.priceData.marginOptions[index];
-            if (!option) return;
-            const oldValue = option.value;
-            
-            option.label = (marginRow.querySelector('.margin-label-input') as HTMLInputElement).value;
-            const percentage = parseFloat((marginRow.querySelector('.margin-value-input') as HTMLInputElement).value);
-            option.value = isNaN(percentage) ? 1 : (1 + percentage / 100);
-
-            if (state.priceData.settings.margin === oldValue) {
-                state.priceData.settings.margin = option.value;
-            }
-            render();
-        } else if (target.id === 'quick-add-category') {
-            (document.getElementById('quick-add-new-category') as HTMLElement).style.display = (target as HTMLSelectElement).value === '--new--' ? 'block' : 'none';
-        } else if (row && row.dataset.category) {
+        if (row && row.dataset.category) {
             const category = row.dataset.category;
             if (target.classList.contains('model-select')) { state.selection[category].model = (target as HTMLSelectElement).value; render(); }
         } else if (row && row.dataset.customId) {
             const item = state.customItems.find(i => i.id === Number(row.dataset.customId));
             if (item && target.classList.contains('custom-model-select')) { item.model = (target as HTMLSelectElement).value; render(); }
-        } else if (target.id === 'margin-select') {
-            state.selectedMargin = Number((target as HTMLSelectElement).value); render();
         }
     });
 
