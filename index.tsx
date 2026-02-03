@@ -257,13 +257,13 @@ function renderLoginView() {
                         </div>
                     ` : ''}
                     <div class="auth-input-group">
-                        <label for="email">${isSignIn ? '用户名' : '邮箱'}</label>
+                        <label for="email">${isSignIn ? '邮箱 (或输入 admin 登录)' : '邮箱'}</label>
                         <input 
                             type="${isSignIn ? 'text' : 'email'}" 
                             id="email" 
                             required 
                             autocomplete="${isSignIn ? 'username' : 'email'}" 
-                            placeholder="${isSignIn ? '请输入您的用户名' : '请输入您的邮箱地址'}" 
+                            placeholder="请输入您的邮箱地址" 
                         />
                     </div>
                     <div class="auth-input-group">
