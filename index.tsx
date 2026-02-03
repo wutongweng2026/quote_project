@@ -1,4 +1,3 @@
-
 // --- DATA (Embedded) & CONFIG ---
 const CONFIG_ROWS = ['主机', '内存', '硬盘1', '硬盘2', '显卡', '电源', '显示器'];
 declare var XLSX: any;
@@ -679,12 +678,12 @@ function addEventListeners() {
         if (!target) return;
         
         const button = target.closest('button');
-        // FIX: Cast element from closest() to HTMLElement to access dataset property.
-        const row = target.closest('tr') as HTMLElement;
-        // FIX: Cast element from closest() to HTMLElement to access dataset property.
-        const tierRow = target.closest('.tier-row') as HTMLElement;
-        // FIX: Cast element from closest() to HTMLElement to access dataset property.
-        const marginRow = target.closest('.margin-option-row') as HTMLElement;
+        // FIX: Cast closest() result to HTMLElement to access dataset property.
+        const row = target.closest<HTMLTableRowElement>('tr');
+        // FIX: Cast closest() result to HTMLElement to access dataset property.
+        const tierRow = target.closest<HTMLElement>('.tier-row');
+        // FIX: Cast closest() result to HTMLElement to access dataset property.
+        const marginRow = target.closest<HTMLElement>('.margin-option-row');
 
         if (target.id === 'modal-overlay' || target.id === 'custom-modal-overlay') {
              state.showLoginModal = false;
@@ -875,10 +874,10 @@ function addEventListeners() {
 
     appContainer.addEventListener('input', (e) => {
         const target = e.target as HTMLInputElement;
-        // FIX: Cast element from closest() to HTMLElement to access dataset property.
-        const row = target.closest('tr') as HTMLElement;
-        // FIX: Cast element from closest() to HTMLElement to access dataset property.
-        const tierRow = target.closest('.tier-row') as HTMLElement;
+        // FIX: Cast closest() result to HTMLElement to access dataset property.
+        const row = target.closest<HTMLTableRowElement>('tr');
+        // FIX: Cast closest() result to HTMLElement to access dataset property.
+        const tierRow = target.closest<HTMLElement>('.tier-row');
         
         if (target.id === 'new-category-input') { state.newCategory = target.value; return; }
         if (target.id === 'admin-search-input') { state.adminSearchTerm = target.value; render(); return; }
@@ -909,10 +908,10 @@ function addEventListeners() {
     
     appContainer.addEventListener('change', (e) => {
         const target = e.target as HTMLInputElement | HTMLSelectElement;
-        // FIX: Cast element from closest() to HTMLElement to access dataset property.
-        const row = target.closest('tr') as HTMLElement;
-        // FIX: Cast element from closest() to HTMLElement to access dataset property.
-        const marginRow = target.closest('.margin-option-row') as HTMLElement;
+        // FIX: Cast closest() result to HTMLElement to access dataset property.
+        const row = target.closest<HTMLTableRowElement>('tr');
+        // FIX: Cast closest() result to HTMLElement to access dataset property.
+        const marginRow = target.closest<HTMLElement>('.margin-option-row');
 
         if (target.id === 'import-file-input') { handleFileSelect(e as unknown as Event); return; }
         
