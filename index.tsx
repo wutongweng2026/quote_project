@@ -451,7 +451,7 @@ function calculateTotals() {
     const standardCost = Object.entries(state.selection).reduce((acc, [category, { model, quantity }]) => {
         if (model && quantity > 0) {
             const dataCategory = category.startsWith('硬盘') ? '硬盘' : category;
-            const cost = state.priceData.prices[dataCategory]?.[model] ?? 0;
+            const cost = state.priceData?.prices[dataCategory]?.[model] ?? 0;
             return acc + (cost * quantity);
         }
         return acc;
@@ -459,7 +459,7 @@ function calculateTotals() {
 
     const customCost = state.customItems.reduce((acc, item) => {
         if (item.model && item.quantity > 0) {
-            const cost = state.priceData.prices[item.category]?.[item.model] ?? 0;
+            const cost = state.priceData?.prices[item.category]?.[item.model] ?? 0;
             return acc + (cost * item.quantity);
         }
         return acc;
@@ -510,7 +510,7 @@ function handleMatchConfig() {
 
     // 1. Prepare data
     const newSelection = getInitialSelection();
-    const allModels = Object.entries(state.priceData.prices)
+    const allModels = Object.entries(state.priceData?.prices ?? {})
         .flatMap(([category, models]) =>
             Object.keys(models).map(model => ({
                 model,
@@ -597,7 +597,7 @@ function handleExportExcel() {
     allItems.forEach(([category, { model, quantity }]) => {
         if (model && quantity > 0) {
             const dataCategory = category.startsWith('硬盘') ? '硬盘' : category;
-            const cost = state.priceData.prices[dataCategory]?.[model] ?? 0;
+            const cost = state.priceData?.prices[dataCategory]?.[model] ?? 0;
             const subtotal = cost * quantity;
             costTotal += subtotal;
             rows.push([category, model, cost.toString(), quantity.toString(), subtotal.toString()]);
@@ -774,7 +774,7 @@ function addEventListeners() {
             state.newCategory = '';
             state.specialDiscount = 0;
             state.discountRate = 1.0;
-            state.selectedMargin = state.priceData.settings.margin;
+            state.selectedMargin = state.priceData?.settings.margin ?? null;
             render();
         } else if (button && button.classList.contains('remove-item-btn') && row) {
             const category = row.dataset.category;
@@ -797,12 +797,14 @@ function addEventListeners() {
             handleExportExcel();
         } else if (button && button.id === 'export-all-prices-btn') {
             const rows = [['分类', '型号', '单价']];
-            const sortedCategories = Object.keys(state.priceData.prices).sort();
+            const sortedCategories = Object.keys(state.priceData?.prices ?? {}).sort();
             for (const category of sortedCategories) {
-                const models = state.priceData.prices[category];
-                const sortedModels = Object.keys(models).sort();
-                for (const model of sortedModels) {
-                    rows.push([category, model, models[model].toString()]);
+                const models = state.priceData?.prices?.[category];
+                if (models) {
+                    const sortedModels = Object.keys(models).sort();
+                    for (const model of sortedModels) {
+                        rows.push([category, model, models[model].toString()]);
+                    }
                 }
             }
 
@@ -840,10 +842,12 @@ function addEventListeners() {
             const { category, model } = row.dataset;
             const newPrice = parseFloat((row.querySelector('.price-input') as HTMLInputElement).value);
             if (category && model && !isNaN(newPrice)) {
-                state.priceData.prices[category][model] = newPrice;
-                updateTimestamp();
-                button.style.backgroundColor = '#16a34a';
-                setTimeout(() => { button.style.backgroundColor = ''; }, 1000);
+                if (state.priceData?.prices?.[category]) {
+                    state.priceData.prices[category][model] = newPrice;
+                    updateTimestamp();
+                    button.style.backgroundColor = '#16a34a';
+                    setTimeout(() => { button.style.backgroundColor = ''; }, 1000);
+                }
             }
         } else if (button && button.classList.contains('admin-delete-item-btn') && row) {
             const { category, model } = row.dataset;
@@ -855,7 +859,7 @@ function addEventListeners() {
                     isDanger: true,
                     confirmText: '删除',
                     onConfirm: () => {
-                        if(state.priceData) {
+                        if(state.priceData?.prices?.[category]) {
                             delete state.priceData.prices[category][model];
                             if (Object.keys(state.priceData.prices[category]).length === 0) delete state.priceData.prices[category];
                             updateTimestamp();
@@ -865,23 +869,27 @@ function addEventListeners() {
                 });
             }
         } else if (button && button.id === 'add-tier-btn') {
-            state.priceData.tieredDiscounts.push({ id: Date.now(), threshold: 0, rate: 0 });
+            state.priceData?.tieredDiscounts.push({ id: Date.now(), threshold: 0, rate: 0 });
             render();
         } else if (button && button.classList.contains('remove-tier-btn') && tierRow) {
             const tierId = Number(tierRow.dataset.tierId);
-            state.priceData.tieredDiscounts = state.priceData.tieredDiscounts.filter(t => t.id !== tierId);
+            if (state.priceData) {
+                state.priceData.tieredDiscounts = state.priceData.tieredDiscounts.filter(t => t.id !== tierId);
+            }
             render();
         } else if (button && button.id === 'add-margin-btn') {
-            state.priceData.marginOptions.push({ label: '新倍率', value: 1.0 });
+            state.priceData?.marginOptions.push({ label: '新倍率', value: 1.0 });
             render();
         } else if (button && button.classList.contains('remove-margin-btn') && marginRow) {
             const index = parseInt(marginRow.dataset.index!, 10);
-            const wasDefault = state.priceData.marginOptions[index].value === state.priceData.settings.margin;
-            state.priceData.marginOptions.splice(index, 1);
-            if (wasDefault && state.priceData.marginOptions.length > 0) {
-                state.priceData.settings.margin = state.priceData.marginOptions[0].value;
-            } else if (state.priceData.marginOptions.length === 0) {
-                state.priceData.settings.margin = 1.0;
+            const wasDefault = state.priceData?.marginOptions[index].value === state.priceData?.settings.margin;
+            state.priceData?.marginOptions.splice(index, 1);
+            if (state.priceData) {
+                if (wasDefault && state.priceData.marginOptions.length > 0) {
+                    state.priceData.settings.margin = state.priceData.marginOptions[0].value;
+                } else if (state.priceData.marginOptions.length === 0) {
+                    state.priceData.settings.margin = 1.0;
+                }
             }
             render();
         } else if (button && button.id === 'save-params-btn') {
@@ -940,7 +948,7 @@ function addEventListeners() {
 
         if (tierRow) {
             const tierId = Number(tierRow.dataset.tierId);
-            const tier = state.priceData.tieredDiscounts.find(t => t.id === tierId);
+            const tier = state.priceData?.tieredDiscounts.find(t => t.id === tierId);
             if (!tier) return;
             if (target.classList.contains('tier-threshold')) tier.threshold = Number(target.value);
             if (target.classList.contains('tier-rate')) tier.rate = Number(target.value);
@@ -971,17 +979,20 @@ function addEventListeners() {
         if (target.id === 'import-file-input') { handleFileSelect(e as unknown as Event); return; }
         
         if (target.classList.contains('margin-default-radio')) {
-            state.priceData.settings.margin = Number((target as HTMLInputElement).value);
+            if (state.priceData) {
+                state.priceData.settings.margin = Number((target as HTMLInputElement).value);
+            }
         } else if (marginRow && (target.classList.contains('margin-label-input') || target.classList.contains('margin-value-input'))) {
             const index = parseInt(marginRow.dataset.index!, 10);
-            const option = state.priceData.marginOptions[index];
+            const option = state.priceData?.marginOptions[index];
+            if (!option) return;
             const oldValue = option.value;
             
             option.label = (marginRow.querySelector('.margin-label-input') as HTMLInputElement).value;
             const newValue = parseFloat((marginRow.querySelector('.margin-value-input') as HTMLInputElement).value);
             option.value = isNaN(newValue) ? 0 : newValue;
 
-            if (state.priceData.settings.margin === oldValue) {
+            if (state.priceData && state.priceData.settings.margin === oldValue) {
                 state.priceData.settings.margin = option.value;
             }
             render();
@@ -1001,8 +1012,8 @@ function addEventListeners() {
     });
 
     // Add keydown listener for the modal
-    // FIX: Explicitly type `e` as KeyboardEvent to access the `key` property.
-    appContainer.addEventListener('keydown', (e: KeyboardEvent) => {
+    // FIX: Explicitly type `e` as `any` to address the overload error.
+    appContainer.addEventListener('keydown', (e: any) => {
         if (state.showLoginModal && e.key === 'Enter') {
             e.preventDefault();
             handleLogin();
