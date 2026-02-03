@@ -880,6 +880,10 @@ async function handleAuthAction(e: Event) {
     const password = passwordInput.value;
 
     try {
+        if (!identifier || !password) {
+            throw new Error("missing email or phone");
+        }
+        
         if (state.loginView === 'signIn') {
             if (identifier.toLowerCase() === 'admin' && password === 'admin!admin') {
                 // Special admin login. This requires a user with the specified email to exist in Supabase Auth.
