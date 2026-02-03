@@ -87,7 +87,7 @@ function renderQuoteTool() {
     return `
         <div class="quoteContainer">
             <header class="quoteHeader">
-                <h1>产品报价系统 <span>v1.01 -- 龙盛科技</span></h1>
+                <h1>产品报价系统 <span>v1.01 -- 龍盛科技</span></h1>
                 <div class="header-actions">
                     <span class="update-timestamp">${formattedDate}</span>
                     <button class="admin-button" id="app-view-toggle-btn">${state.isLoggedIn ? '后台管理' : '后台登录'}</button>
@@ -237,7 +237,7 @@ function renderAdminPanel() {
     return `
     <div class="adminContainer">
         <header class="adminHeader">
-            <h2>龙盛科技 系统管理后台 V1.01</h2>
+            <h2>龍盛科技 系统管理后台 V1.01</h2>
             <button id="back-to-quote-btn" class="admin-button">返回报价首页</button>
         </header>
 
@@ -332,7 +332,7 @@ function renderAdminPanel() {
             </div>
         </div>
 
-        <button id="save-config-btn" class="generate-btn" style="width: 100%; padding: 0.8rem; margin-top: 1rem;">保存全部配置并下载</button>
+        <button id="export-all-prices-btn" class="generate-btn" style="width: 100%; padding: 0.8rem; margin-top: 1rem;">导出全部价格为Excel</button>
     </div>
     `;
 }
@@ -610,13 +610,34 @@ function addEventListeners() {
             handleMatchConfig();
         } else if (button.id === 'generate-quote-btn') {
             handleExportExcel();
-        } else if (button.id === 'save-config-btn') {
-            const dataStr = JSON.stringify(state.priceData, null, 2);
-            const blob = new Blob([dataStr], {type: "application/json"});
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url; a.download = 'prices_data.json'; a.click();
-            URL.revokeObjectURL(url);
+        } else if (button.id === 'export-all-prices-btn') {
+            const rows = [['分类', '型号', '单价']];
+            const sortedCategories = Object.keys(state.priceData.prices).sort();
+            for (const category of sortedCategories) {
+                const models = state.priceData.prices[category];
+                const sortedModels = Object.keys(models).sort();
+                for (const model of sortedModels) {
+                    rows.push([category, model, models[model].toString()]);
+                }
+            }
+
+            let csvContent = "\uFEFF"; // BOM for Excel compatibility
+            rows.forEach(rowArray => {
+                let row = rowArray.join(',');
+                csvContent += row + '\r\n';
+            });
+
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement("a");
+            if (link.download !== undefined) {
+                const url = URL.createObjectURL(blob);
+                link.setAttribute("href", url);
+                link.setAttribute("download", "全部价格表.csv");
+                link.style.visibility = 'hidden';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            }
         } else if (button.id === 'quick-add-btn') {
             let category = $('#quick-add-category').value;
             if (category === '--new--') category = $('#quick-add-new-category').value.trim();
@@ -791,29 +812,65 @@ function addEventListeners() {
 
 // --- INITIALIZATION ---
 async function initializeApp() {
-    render(); // Initial render to show loading message
+    render(); // Initial render to show "loading..." message
+
     try {
         const response = await fetch('/prices_data.json');
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
         const priceData = await response.json();
-        state.priceData = priceData;
-        
-        if (!state.priceData || !state.priceData.prices) {
-             throw new Error("Price data is malformed or missing.");
+
+        // Basic validation of the loaded data
+        if (!priceData || typeof priceData.prices !== 'object') {
+             throw new Error("Price data is malformed or missing key properties.");
         }
+
+        state.priceData = priceData;
+
+        // Initialize state from loaded data, providing defaults if properties are missing
         if (state.priceData.discounts && state.priceData.discounts.length > 0) {
             state.discountRate = state.priceData.discounts[0].rate;
+        } else {
+            state.priceData.discounts = [{ label: "无折扣", rate: 1.0 }];
+            state.discountRate = 1.0;
         }
-        state.selectedMargin = state.priceData.settings.margin;
+
+        if (state.priceData.settings && typeof state.priceData.settings.margin === 'number') {
+            state.selectedMargin = state.priceData.settings.margin;
+        } else {
+            state.priceData.settings = { margin: 1.15 };
+            state.selectedMargin = 1.15;
+        }
+        
+        if (!Array.isArray(state.priceData.marginOptions) || state.priceData.marginOptions.length === 0) {
+            state.priceData.marginOptions = [{ label: '标准 (1.15)', value: 1.15 }];
+        }
+        if (!Array.isArray(state.priceData.tieredDiscounts)) {
+            state.priceData.tieredDiscounts = [];
+        }
+
     } catch (error) {
-        console.error("Could not load price data:", error);
-        appContainer.innerHTML = `<div class="loading-container error"><h1>加载价格数据失败</h1><p>请检查 'prices_data.json' 文件是否存在且格式正确。</p></div>`;
-        return;
+        console.error("Could not load price data, using fallback:", error);
+
+        // Create a complete fallback data structure to allow the app to run.
+        state.priceData = {
+            settings: { margin: 1.15 },
+            marginOptions: [{ label: '标准 (1.15)', value: 1.15 }],
+            prices: {}, // Dropdowns will be empty, which is fine.
+            discounts: [{ label: '无折扣 (1.0)', rate: 1.0 }],
+            tieredDiscounts: [],
+            lastUpdated: null,
+        };
+        
+        // Initialize state from fallback data
+        state.discountRate = 1.0;
+        state.selectedMargin = 1.15;
     }
-    render(); // Re-render with the loaded data
+
+    render(); // Render the main UI with either loaded data or fallback data.
 }
+
 
 addEventListeners();
 initializeApp();
