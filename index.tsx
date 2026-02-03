@@ -699,12 +699,12 @@ function processImportedData(data: any[][]) {
             }
 
             if (category && model && !isNaN(price)) {
-                if (!state.priceData.prices[category]) {
-                    state.priceData.prices[category] = {};
+                if (!state.priceData!.prices[category]) {
+                    state.priceData!.prices[category] = {};
                 }
-                if (state.priceData.prices[category][model] === undefined) addedCount++;
+                if (state.priceData!.prices[category][model] === undefined) addedCount++;
                 else updatedCount++;
-                state.priceData.prices[category][model] = price;
+                state.priceData!.prices[category][model] = price;
                 importHappened = true;
             }
         }
@@ -859,7 +859,7 @@ function addEventListeners() {
                     isDanger: true,
                     confirmText: '删除',
                     onConfirm: () => {
-                        if(state.priceData?.prices?.[category]) {
+                        if(state.priceData!.prices[category]) {
                             delete state.priceData!.prices[category][model];
                             if (Object.keys(state.priceData!.prices[category]).length === 0) delete state.priceData!.prices[category];
                             updateTimestamp();
@@ -884,11 +884,11 @@ function addEventListeners() {
             const index = parseInt(marginRow.dataset.index!, 10);
             const wasDefault = state.priceData!.marginOptions[index].value === state.priceData!.settings.margin;
             state.priceData!.marginOptions.splice(index, 1);
-            if (state.priceData) {
-                if (wasDefault && state.priceData.marginOptions.length > 0) {
-                    state.priceData.settings.margin = state.priceData.marginOptions[0].value;
-                } else if (state.priceData.marginOptions.length === 0) {
-                    state.priceData.settings.margin = 1.0;
+            if (state.priceData!) {
+                if (wasDefault && state.priceData!.marginOptions.length > 0) {
+                    state.priceData!.settings.margin = state.priceData!.marginOptions[0].value;
+                } else if (state.priceData!.marginOptions.length === 0) {
+                    state.priceData!.settings.margin = 1.0;
                 }
             }
             render();
@@ -992,8 +992,8 @@ function addEventListeners() {
             const newValue = parseFloat((marginRow.querySelector('.margin-value-input') as HTMLInputElement).value);
             option.value = isNaN(newValue) ? 0 : newValue;
 
-            if (state.priceData && state.priceData.settings.margin === oldValue) {
-                state.priceData.settings.margin = option.value;
+            if (state.priceData && state.priceData!.settings.margin === oldValue) {
+                state.priceData!.settings.margin = option.value;
             }
             render();
         } else if (target.id === 'quick-add-category') {
