@@ -1,0 +1,129 @@
+
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>价格管理 - 产品报价系统</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            background-color: #f0f2f5;
+            color: #333;
+            padding: 20px;
+        }
+        .container { max-width: 1000px; margin: 0 auto; }
+        h1, h2 { color: #111; }
+        a { color: #1890ff; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        .panel { background: #fff; border: 1px solid #e8e8e8; border-radius: 4px; padding: 20px; margin-bottom: 20px; }
+        .form-table { width: 100%; border-collapse: collapse; }
+        .form-table th, .form-table td { padding: 8px; border: 1px solid #e8e8e8; text-align: left; }
+        .form-table th { background-color: #fafafa; }
+        input[type="text"], input[type="number"] { width: 95%; padding: 6px; border: 1px solid #d9d9d9; border-radius: 4px; }
+        .btn { padding: 8px 15px; border-radius: 4px; border: 1px solid transparent; cursor: pointer; }
+        .btn-primary { background-color: #1890ff; color: white; }
+        .btn-danger { background-color: #ff4d4f; color: white; }
+        .btn-add { background-color: #52c41a; color: white; }
+        .actions { margin-top: 20px; text-align: right; }
+        .success-msg { background-color: #f6ffed; border: 1px solid #b7eb8f; color: #52c41a; padding: 10px; border-radius: 4px; margin-bottom: 20px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>价格管理面板</h1>
+            <a href="/">&larr; 返回报价系统</a>
+        </div>
+
+        {% if success_message %}
+        <div class="success-msg">{{ success_message }}</div>
+        {% endif %}
+
+        <form action="/update-prices" method="POST">
+            {% for category_id, category_name in data.categories.items() %}
+            <div class="panel">
+                <h2>{{ category_name }}</h2>
+                <table class="form-table" id="table-{{ category_id }}">
+                    <thead>
+                        <tr>
+                            <th>名称</th>
+                            <th>价格 (¥)</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for component in data.components[category_id] %}
+                        {% if not component.name.startswith('--') %}
+                        <tr>
+                            <td><input type="text" name="component-{{ category_id }}-{{ loop.index0 }}-name" value="{{ component.name }}"></td>
+                            <td><input type="number" step="0.01" name="component-{{ category_id }}-{{ loop.index0 }}-price" value="{{ component.price }}"></td>
+                            <td><button type="button" class="btn btn-danger" onclick="removeRow(this)">删除</button></td>
+                        </tr>
+                        {% endif %}
+                        {% endfor %}
+                    </tbody>
+                </table>
+                <button type="button" class="btn btn-add" style="margin-top: 10px;" onclick="addRow('{{ category_id }}')">添加 {{ category_name }}</button>
+            </div>
+            {% endfor %}
+
+            <div class="panel">
+                <h2>折扣管理</h2>
+                <table class="form-table" id="table-discounts">
+                    <thead>
+                        <tr>
+                            <th>折扣名称</th>
+                            <th>乘数 (例如: 0.95)</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for discount in data.discounts %}
+                        <tr>
+                            <td><input type="text" name="discount-{{ loop.index0 }}-name" value="{{ discount.name }}"></td>
+                            <td><input type="number" step="0.01" name="discount-{{ loop.index0 }}-multiplier" value="{{ discount.multiplier }}"></td>
+                            <td><button type="button" class="btn btn-danger" onclick="removeRow(this)">删除</button></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                <button type="button" class="btn btn-add" style="margin-top: 10px;" onclick="addDiscountRow()">添加折扣</button>
+            </div>
+
+            <div class="actions">
+                <button type="submit" class="btn btn-primary">保存所有更改</button>
+            </div>
+        </form>
+    </div>
+
+    <script>
+        function removeRow(button) {
+            button.closest('tr').remove();
+        }
+
+        function addRow(categoryId) {
+            const table = document.getElementById(`table-${categoryId}`).getElementsByTagName('tbody')[0];
+            const newIndex = table.rows.length;
+            const newRow = table.insertRow();
+            newRow.innerHTML = `
+                <td><input type="text" name="component-${categoryId}-${newIndex}-name" value=""></td>
+                <td><input type="number" step="0.01" name="component-${categoryId}-${newIndex}-price" value="0"></td>
+                <td><button type="button" class="btn btn-danger" onclick="removeRow(this)">删除</button></td>
+            `;
+        }
+        
+        function addDiscountRow() {
+            const table = document.getElementById('table-discounts').getElementsByTagName('tbody')[0];
+            const newIndex = table.rows.length;
+            const newRow = table.insertRow();
+            newRow.innerHTML = `
+                <td><input type="text" name="discount-${newIndex}-name" value=""></td>
+                <td><input type="number" step="0.01" name="discount-${newIndex}-multiplier" value="1.0"></td>
+                <td><button type="button" class="btn btn-danger" onclick="removeRow(this)">删除</button></td>
+            `;
+        }
+    </script>
+</body>
+</html>

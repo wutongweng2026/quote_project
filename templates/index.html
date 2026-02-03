@@ -1,0 +1,429 @@
+
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>产品报价系统 V1.01</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
+            background-color: #f0f2f5;
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background-color: #fff;
+            border: 1px solid #d9d9d9;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }
+        .header {
+            background-color: #4CAF50;
+            color: white;
+            padding: 15px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 20px;
+            font-weight: 600;
+        }
+        .header h1 small {
+            font-size: 12px;
+            font-weight: normal;
+            opacity: 0.9;
+            margin-left: 10px;
+        }
+        .admin-btn {
+            background-color: #f0f2f5;
+            color: #333;
+            border: 1px solid #ccc;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 12px;
+            cursor: pointer;
+            text-decoration: none;
+        }
+        .admin-btn:hover { background-color: #e6e6e6; }
+        .main-content { padding: 20px; }
+        .config-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .config-table th, .config-table td {
+            padding: 10px;
+            text-align: left;
+            border-bottom: 1px solid #f0f0f0;
+            vertical-align: middle;
+        }
+        .config-table th {
+            background-color: #fafafa;
+            font-weight: 500;
+            color: #555;
+        }
+        .config-table td:first-child { width: 15%; font-weight: 500; }
+        .config-table td:nth-child(2) { width: 55%; }
+        .config-table td:nth-child(3) { width: 15%; }
+        .config-table td:nth-child(4) { width: 15%; text-align: center; }
+        select, input[type="number"], input[type="text"], textarea {
+            width: 100%;
+            padding: 6px 10px;
+            border: 1px solid #d9d9d9;
+            border-radius: 4px;
+            box-sizing: border-box;
+            transition: border-color 0.2s;
+        }
+        select:focus, input:focus, textarea:focus {
+            border-color: #4CAF50;
+            outline: none;
+        }
+        .quantity-input { text-align: center; }
+        .remove-btn, .add-row-btn {
+            background-color: #ff4d4f;
+            color: white;
+            border: none;
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 16px;
+            line-height: 28px;
+            text-align: center;
+        }
+        .remove-btn:hover { background-color: #d9363e; }
+        .add-row-btn { background-color: #1890ff; margin-left: auto; }
+        .add-row-btn:hover { background-color: #096dd9; }
+
+        .form-section {
+            border-top: 1px solid #f0f0f0;
+            padding-top: 15px;
+            margin-top: 15px;
+        }
+        .form-row {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .form-row label {
+            width: 100px;
+            flex-shrink: 0;
+            font-weight: 500;
+        }
+        .form-row .input-wrapper { flex-grow: 1; }
+        .form-row .input-wrapper.with-button { display: flex; gap: 10px; }
+        .form-row .input-wrapper.with-button input { flex-grow: 1; }
+        
+        .match-btn {
+            background-color: #faad14;
+            color: white;
+            border: none;
+            padding: 7px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+        .match-btn:hover { background-color: #d48806; }
+        #final-config { height: 80px; resize: vertical; }
+        
+        .actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+        .actions button {
+            flex-grow: 1;
+            padding: 10px;
+            border: none;
+            border-radius: 4px;
+            font-size: 16px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+        .actions button:disabled { opacity: 0.6; cursor: not-allowed; }
+        #reset-btn { background-color: #ff4d4f; color: white; }
+        #generate-btn { background-color: #4CAF50; color: white; }
+        #add-extra-btn { background-color: #1890ff; color: white; }
+
+        .total-price-section {
+            background-color: #f0f9f0;
+            text-align: center;
+            padding: 20px;
+            margin-top: -1px;
+        }
+        .total-price {
+            font-size: 32px;
+            font-weight: bold;
+            color: #d9363e;
+        }
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <h1>产品报价系统 <small>V1.01 -- 龙盛科技</small></h1>
+            <a href="/admin" class="admin-btn">管理后台</a>
+        </header>
+        <main class="main-content">
+            <table class="config-table" id="config-table">
+                <thead>
+                    <tr>
+                        <th>配置清单</th>
+                        <th>规格型号</th>
+                        <th>数量</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for category_id, category_name in data.categories.items() %}
+                    <tr data-category="{{ category_id }}">
+                        <td>{{ category_name }}</td>
+                        <td>
+                            <select name="{{ category_id }}" class="component-select">
+                                {% for component in data.components[category_id] %}
+                                <option value="{{ component.id }}" data-price="{{ component.price }}">{{ component.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </td>
+                        <td>
+                            <input type="number" value="{{ 1 if category_id != 'hdd' else 0 }}" min="0" class="quantity-input">
+                        </td>
+                        <td>
+                            <button class="remove-btn">-</button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+
+            <div class="form-section">
+                <div class="form-row">
+                    <label for="match-input">产品匹配:</label>
+                    <div class="input-wrapper with-button">
+                        <input type="text" id="match-input" placeholder="在此处粘贴配置如: TSK-C3 I5-14500/8G DDR *2/512G SSD+2T HDD/RTX4060 8G/500W">
+                        <button class="match-btn" id="match-btn">匹配配置</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="form-section">
+                 <div class="form-row">
+                    <label for="final-config">最终配置:</label>
+                    <div class="input-wrapper">
+                         <textarea id="final-config" readonly>未选择配件</textarea>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <label for="discount">折扣选择:</label>
+                    <div class="input-wrapper">
+                        <select id="discount">
+                            {% for discount in data.discounts %}
+                            <option value="{{ discount.id }}">{{ discount.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                 <div class="form-row">
+                    <label for="special-reduction">特别立减:</label>
+                    <div class="input-wrapper">
+                        <input type="number" id="special-reduction" value="0" min="0">
+                    </div>
+                </div>
+            </div>
+
+            <div class="actions">
+                <button id="reset-btn">重置</button>
+                <button id="generate-btn">生成报价单</button>
+                <button id="add-extra-btn" title="添加额外项目行（待开发）">+</button>
+            </div>
+            
+            <div id="quote-modal" class="hidden" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000;">
+                <div style="background: white; padding: 20px; border-radius: 8px; width: 90%; max-width: 600px; max-height: 80vh; overflow-y: auto;">
+                    <h2 style="margin-top: 0;">AI 生成的报价单</h2>
+                    <div id="quote-content" class="prose" style="white-space: pre-wrap; background: #f7f7f7; border: 1px solid #eee; padding: 15px; border-radius: 4px;"></div>
+                    <button id="close-modal-btn" style="margin-top: 15px; padding: 8px 16px; background: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer;">关闭</button>
+                </div>
+            </div>
+
+        </main>
+        <footer class="total-price-section">
+            <div class="total-price" id="total-price">¥ 0.00</div>
+        </footer>
+    </div>
+    <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const tableBody = document.querySelector('#config-table tbody');
+        const totalPriceEl = document.getElementById('total-price');
+        const finalConfigEl = document.getElementById('final-config');
+        const discountEl = document.getElementById('discount');
+        const reductionEl = document.getElementById('special-reduction');
+        const resetBtn = document.getElementById('reset-btn');
+        const matchBtn = document.getElementById('match-btn');
+        const matchInput = document.getElementById('match-input');
+        const generateBtn = document.getElementById('generate-btn');
+        const quoteModal = document.getElementById('quote-modal');
+        const quoteContent = document.getElementById('quote-content');
+        const closeModalBtn = document.getElementById('close-modal-btn');
+
+
+        function calculateTotal() {
+            let total = 0;
+            let finalConfigText = '';
+            
+            const selections = [];
+
+            tableBody.querySelectorAll('tr').forEach(row => {
+                const select = row.querySelector('.component-select');
+                const quantityInput = row.querySelector('.quantity-input');
+                const category = row.dataset.category;
+                const quantity = parseInt(quantityInput.value, 10) || 0;
+                
+                if (select.value !== `${category}_0` && quantity > 0) {
+                    const selectedOption = select.options[select.selectedIndex];
+                    const price = parseFloat(selectedOption.dataset.price);
+                    total += price * quantity;
+                    
+                    const componentName = selectedOption.textContent;
+                    const categoryName = row.cells[0].textContent;
+                    finalConfigText += `${categoryName}: ${componentName} x ${quantity}\n`;
+                }
+                
+                selections.push({
+                    category: category,
+                    itemId: select.value,
+                    quantity: quantity
+                });
+            });
+
+            const discount = {{ data.discounts | tojson }}.find(d => d.id === discountEl.value);
+            const multiplier = discount ? discount.multiplier : 1.0;
+            total *= multiplier;
+
+            const reduction = parseFloat(reductionEl.value) || 0;
+            total -= reduction;
+
+            totalPriceEl.textContent = `¥ ${total.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+            finalConfigEl.value = finalConfigText.trim() || '未选择配件';
+        }
+        
+        function resetForm() {
+            tableBody.querySelectorAll('tr').forEach(row => {
+                const category = row.dataset.category;
+                row.querySelector('select').value = `${category}_0`;
+                const quantityInput = row.querySelector('.quantity-input');
+                quantityInput.value = (category === 'hdd') ? '0' : '1';
+            });
+            discountEl.value = 'none';
+            reductionEl.value = '0';
+            matchInput.value = '';
+            calculateTotal();
+        }
+
+        async function matchConfig() {
+            const configString = matchInput.value.trim();
+            if (!configString) {
+                alert('请输入配置信息！');
+                return;
+            }
+            matchBtn.textContent = '匹配中...';
+            matchBtn.disabled = true;
+
+            try {
+                const response = await fetch('/match-config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ configString }),
+                });
+                if (!response.ok) throw new Error('解析失败');
+                
+                const matchedIds = await response.json();
+                
+                Object.entries(matchedIds).forEach(([category, componentId]) => {
+                    const row = tableBody.querySelector(`tr[data-category="${category}"]`);
+                    if (row) {
+                        const select = row.querySelector('select');
+                        if (select) {
+                           // Check if option exists
+                           if ([...select.options].some(option => option.value === componentId)) {
+                                select.value = componentId;
+                           } else {
+                                console.warn(`Component ID "${componentId}" not found for category "${category}".`);
+                           }
+                        }
+                    }
+                });
+                calculateTotal();
+
+            } catch (error) {
+                console.error('Match Config Error:', error);
+                alert('无法匹配配置，请检查输入或稍后再试。');
+            } finally {
+                matchBtn.textContent = '匹配配置';
+                matchBtn.disabled = false;
+            }
+        }
+        
+        async function generateQuote() {
+            generateBtn.textContent = '生成中...';
+            generateBtn.disabled = true;
+
+            try {
+                const finalConfigText = finalConfigEl.value;
+                const totalPriceText = totalPriceEl.textContent;
+                const totalPrice = parseFloat(totalPriceText.replace(/[¥, ]/g, ''));
+
+                const response = await fetch('/generate-quote', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ finalConfigText, totalPrice }),
+                });
+
+                if (!response.ok) throw new Error('生成报价单失败');
+                const data = await response.json();
+                
+                // Simple markdown to HTML
+                let htmlContent = data.quote
+                    .replace(/## (.*)/g, '<h3>$1</h3>')
+                    .replace(/\* (.*)/g, '<li>$1</li>')
+                    .replace(/---/g, '<hr>')
+                    .replace(/\n/g, '<br>');
+
+                quoteContent.innerHTML = htmlContent;
+                quoteModal.classList.remove('hidden');
+                quoteModal.style.display = 'flex';
+                
+            } catch (error) {
+                console.error('Generate Quote Error:', error);
+                alert(error.message);
+            } finally {
+                generateBtn.textContent = '生成报价单';
+                generateBtn.disabled = false;
+            }
+        }
+
+        tableBody.addEventListener('change', calculateTotal);
+        discountEl.addEventListener('change', calculateTotal);
+        reductionEl.addEventListener('input', calculateTotal);
+        resetBtn.addEventListener('click', resetForm);
+        matchBtn.addEventListener('click', matchConfig);
+        generateBtn.addEventListener('click', generateQuote);
+        
+        closeModalBtn.addEventListener('click', () => {
+             quoteModal.classList.add('hidden');
+             quoteModal.style.display = 'none';
+        });
+
+        // Initial Calculation
+        resetForm(); // Use reset to set initial state correctly
+    });
+    </script>
+</body>
+</html>

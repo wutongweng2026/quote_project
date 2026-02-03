@@ -1,0 +1,55 @@
+
+{
+  "categories": {
+    "chassis": "主机",
+    "cpu": "CPU",
+    "ram": "内存",
+    "ssd": "硬盘1",
+    "hdd": "硬盘2",
+    "gpu": "显卡",
+    "psu": "电源"
+  },
+  "components": {
+    "chassis": [
+      { "id": "chassis_0", "name": "-- 请选择 --", "price": 0 },
+      { "id": "chassis_1", "name": "TSK-C3 黑色机箱", "price": 350 },
+      { "id": "chassis_2", "name": "海景房 白色机箱", "price": 450 }
+    ],
+    "cpu": [
+      { "id": "cpu_0", "name": "-- 请选择 --", "price": 0 },
+      { "id": "cpu_1", "name": "Intel 酷睿 i5-14500", "price": 1799 },
+      { "id": "cpu_2", "name": "Intel 酷睿 i7-14700K", "price": 2899 },
+      { "id": "cpu_3", "name": "AMD 锐龙 R7 7800X3D", "price": 2499 }
+    ],
+    "ram": [
+      { "id": "ram_0", "name": "-- 请选择 --", "price": 0 },
+      { "id": "ram_1", "name": "16GB (8GB*2) DDR5 6000", "price": 549 },
+      { "id": "ram_2", "name": "32GB (16GB*2) DDR5 6000", "price": 999 }
+    ],
+    "ssd": [
+      { "id": "ssd_0", "name": "-- 请选择 --", "price": 0 },
+      { "id": "ssd_1", "name": "1TB M.2 NVMe SSD", "price": 489 },
+      { "id": "ssd_2", "name": "2TB M.2 NVMe SSD", "price": 899 }
+    ],
+    "hdd": [
+      { "id": "hdd_0", "name": "-- 请选择 --", "price": 0 },
+      { "id": "hdd_1", "name": "2TB 机械硬盘", "price": 369 },
+      { "id": "hdd_2", "name": "4TB 机械硬盘", "price": 599 }
+    ],
+    "gpu": [
+      { "id": "gpu_0", "name": "-- 请选择 --", "price": 0 },
+      { "id": "gpu_1", "name": "NVIDIA RTX4060 8GB", "price": 2399 },
+      { "id": "gpu_2", "name": "NVIDIA RTX4070 SUPER 12GB", "price": 4899 }
+    ],
+    "psu": [
+      { "id": "psu_0", "name": "-- 请选择 --", "price": 0 },
+      { "id": "psu_1", "name": "500W 80+铜牌 电源", "price": 299 },
+      { "id": "psu_2", "name": "750W 80+金牌 电源", "price": 599 }
+    ]
+  },
+  "discounts": [
+    { "id": "none", "name": "无折扣 (1.0)", "multiplier": 1.0 },
+    { "id": "vip", "name": "会员折扣 (0.95)", "multiplier": 0.95 },
+    { "id": "promo", "name": "活动折扣 (0.88)", "multiplier": 0.88 }
+  ]
+}
