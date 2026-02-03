@@ -1,3 +1,4 @@
+// LOGIN FUNCTIONALITY COMPLETELY REMOVED. This app now loads directly into the quote tool.
 
 // --- TYPES ---
 interface PriceDataItem { [model: string]: number; }
