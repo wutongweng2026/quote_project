@@ -793,7 +793,7 @@ function addEventListeners() {
 async function initializeApp() {
     render(); // Initial render to show loading message
     try {
-        const response = await fetch('./prices_data.json');
+        const response = await fetch('/prices_data.json');
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
