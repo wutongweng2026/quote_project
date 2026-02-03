@@ -1,3 +1,5 @@
+
+
 // FIX: The reference to "vite/client" was removed as it was causing a "Cannot find type definition file" error.
 // The necessary types for import.meta.env are defined manually below as a workaround for what is likely a
 // project configuration issue (e.g., in tsconfig.json).
@@ -586,7 +588,7 @@ function calculateTotals() {
         }
     }
 
-    return { finalPrice, appliedRate, appliedDiscountLabel };
+    return { finalPrice, appliedRate, appliedDiscountLabel, costTotal };
 }
 
 function getFinalConfigText() {
@@ -596,6 +598,7 @@ function getFinalConfigText() {
             .map(([_, { model, quantity }]) => `${model} * ${quantity}`),
         ...state.customItems
             .filter(item => item.model && item.quantity > 0)
+            // FIX: Corrected a reference error. The `quantity` variable was not defined in this scope; it should be `item.quantity`.
             .map(item => `${item.model} * ${item.quantity}`)
     ];
     return parts.join(' | ');
@@ -676,54 +679,101 @@ function handleMatchConfig() {
 
 function handleExportExcel() {
     const totals = calculateTotals();
-    let costTotal = 0;
-    
-    const rows = [
-        ['类别', '规格型号', '成本单价', '数量', '成本小计']
-    ];
+    const finalConfigText = getFinalConfigText();
 
-    const allItems = [
-        ...Object.entries(state.selection),
-        ...state.customItems.map(item => [item.category, item] as [string, CustomItem])
-    ];
-
-    allItems.forEach(([category, { model, quantity }]) => {
-        if (model && quantity > 0) {
-            const dataCategory = category.startsWith('硬盘') ? '硬盘' : category;
-            const cost = state.priceData.prices[dataCategory]?.[model] ?? 0;
-            const subtotal = cost * quantity;
-            costTotal += subtotal;
-            rows.push([category, model, cost.toString(), quantity.toString(), subtotal.toString()]);
-        }
-    });
-
-    rows.push([]); 
-    rows.push(['', '', '', '总成本', costTotal.toString()]);
-    // FIX: Changed String(state.markupPoints) to state.markupPoints.toString() to fix a type error where 'String' is not considered callable.
-    rows.push(['', '', '', '点位', state.markupPoints.toString()]);
-    rows.push(['', '', '', '折扣', totals.appliedRate.toString()]);
-    rows.push(['', '', '', '特别立减', state.specialDiscount.toString()]);
-    rows.push(['', '', '', '最终报价', totals.finalPrice.toString()]);
-
-    let csvContent = "\uFEFF"; 
-    
-    rows.forEach(rowArray => {
-        let row = rowArray.join(',');
-        csvContent += row + '\r\n';
-    });
-
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement("a");
-    if (link.download !== undefined) {
-        const url = URL.createObjectURL(blob);
-        link.setAttribute("href", url);
-        link.setAttribute("download", "报价单.csv");
-        link.style.visibility = 'hidden';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
+    if (!finalConfigText) {
+        showModal({ title: '无法导出', message: '请先选择至少一个配件再导出报价单。' });
+        return;
     }
+
+    const mainframeModel = state.selection['主机']?.model || '';
+    const modelCode = mainframeModel.split(' ')[0] || '自定义主机';
+    const configString = finalConfigText.replace(/\s*\*\s*\d+/g, '');
+
+    const aoa = [
+        ['北京龙盛天地科技有限公司'], // Row 1 (A1)
+        [null, null, '北京龙盛天地科技有限公司报价表'], // Row 2 (C2)
+        [null, null, '地址: 北京市海淀区清河路164号1号院'], // Row 3 (C3)
+        ['联系服务商', null, '电话: 010-51654433-8013 传真: 010-82627270'], // Row 4 (A4, C4)
+        [''], // Row 5 (Empty)
+        [''], // Row 6 (Empty separator)
+        ['型号', '配置', '数量', '单价', '总价', '备注'], // Row 7 (Table Header)
+        [modelCode, configString, 1, totals.finalPrice, totals.finalPrice, '含13%增值税发票(可开线上价格)，标配带原厂办公软件，含官方直营店官方旗舰店'], // Row 8 (Data)
+        [null, '总计', null, null, totals.finalPrice], // Row 9 (Total)
+        [''], // Row 10 (Empty)
+        ['一、报价金额及有效期'], // Row 11
+        ['1) 总金额: RMB (小写), 即人民币: 元整 (大写)。', null, null, null, null, '供方: 北京龙盛天地科技有限公司'], // Row 12
+        ['2) 报价有效期: ■3个工作日 □5个工作日', null, null, null, null, '(盖章)'], // Row 13
+        ['3) 有效期内价格浮动不高于部份: □供方承担 ■另行商定 □需方承担'], // Row 14
+        ['二、库存情况及最优交货时间'], // Row 15
+        ['1) 库存情况: ■现货库存 □异地调配 □工厂定制'], // Row 16
+        ['2) 最优交货时间: ■3个工作日内 □7个工作日内 □15个工作日内'], // Row 17
+        ['三、运输费用'], // Row 18
+        ['1) 运输: 货物运抵至买方指定交货地点的运输费用由 (■供方) 承担。'], // Row 19
+        ['四、产品安装'], // Row 20
+        ['1) 供方在将货物运抵至需方指定地点后，其技术人员应提供安装服务。'], // Row 21
+        ['五、售后服务'], // Row 22
+        ['1) 此联想是原厂厂商标准服务'], // Row 23
+    ];
+
+    const worksheet = XLSX.utils.aoa_to_sheet(aoa);
+
+    // --- Merges ---
+    const merges = [
+        // Headers
+        { s: { r: 1, c: 2 }, e: { r: 1, c: 8 } }, // Title
+        { s: { r: 2, c: 2 }, e: { r: 2, c: 8 } }, // Address
+        { s: { r: 3, c: 0 }, e: { r: 3, c: 1 } }, // "联系服务商"
+        { s: { r: 3, c: 2 }, e: { r: 3, c: 8 } }, // Phone/Fax
+        { s: { r: 5, c: 0 }, e: { r: 5, c: 8 } }, // Separator bar
+
+        // Main Table
+        { s: { r: 8, c: 1 }, e: { r: 8, c: 3 } }, // Total label "总计"
+
+        // Terms
+        { s: { r: 10, c: 0 }, e: { r: 10, c: 8 } }, // Term Section 1
+        { s: { r: 11, c: 5 }, e: { r: 11, c: 8 } }, // Supplier
+        { s: { r: 12, c: 5 }, e: { r: 12, c: 8 } }, // Stamp
+        { s: { r: 14, c: 0 }, e: { r: 14, c: 8 } }, // Term Section 2
+        { s: { r: 17, c: 0 }, e: { r: 17, c: 8 } }, // Term Section 3
+        { s: { r: 19, c: 0 }, e: { r: 19, c: 8 } }, // Term Section 4
+        { s: { r: 21, c: 0 }, e: { r: 21, c: 8 } }, // Term Section 5
+    ];
+    worksheet['!merges'] = merges;
+
+    // --- Column Widths ---
+    worksheet['!cols'] = [
+        { wch: 12 }, // A 型号
+        { wch: 15 }, // B 配置 (Part 1)
+        { wch: 15 }, // C 配置 (Part 2)
+        { wch: 15 }, // D 配置 (Part 3)
+        { wch: 10 }, // E 数量/单价
+        { wch: 10 }, // F 总价
+        { wch: 12 }, // G 备注
+        { wch: 12 }, // H 备注
+        { wch: 12 }, // I 备注
+    ];
+
+    // --- Row Heights ---
+    worksheet['!rows'] = [
+        { hpx: 25 }, // Row 1
+        { hpx: 30 }, // Row 2 (Title)
+        { hpx: 20 }, // Row 3
+        { hpx: 20 }, // Row 4
+        null,       // Row 5
+        { hpx: 5 }, // Row 6 (Separator)
+        null,       // Row 7
+        { hpx: 40 }, // Row 8 (Data row, allow wrapping)
+    ];
+
+    // Create a new workbook and append the worksheet
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, '报价单');
+
+    // Write the workbook and trigger the download
+    XLSX.writeFile(workbook, '龙盛科技报价单.xlsx');
 }
+
 
 function handleFileSelect(event: Event) {
     const target = event.target as HTMLInputElement;
