@@ -14,6 +14,18 @@ declare global {
 }
 
 // --- TYPES ---
+interface Profile {
+    id: string;
+    full_name: string;
+    phone: string;
+    role: 'admin' | 'user';
+    approved: boolean;
+}
+interface LoginLog {
+    id: number;
+    email: string;
+    timestamp: string;
+}
 interface PriceDataItem { [model: string]: number; }
 interface Prices { [category: string]: PriceDataItem; }
 interface TieredDiscount { id: number; threshold: number; rate: number; }
@@ -37,7 +49,15 @@ interface CustomModalState {
 interface AppState {
     priceData: PriceData;
     isLoggedIn: boolean;
-    view: 'quote' | 'admin';
+    userEmail: string | null;
+    profile: Profile | null;
+    view: 'quote' | 'admin' | 'login' | 'pending';
+    loginView: 'signIn' | 'signUp';
+    adminView: 'prices' | 'users' | 'logs';
+    users: Profile[];
+    loginLogs: LoginLog[];
+    authError: string | null;
+    authLoading: boolean;
     selection: SelectionState;
     customItems: CustomItem[];
     newCategory: string;
@@ -45,8 +65,6 @@ interface AppState {
     markupPoints: number;
     adminSearchTerm: string;
     pendingFile: File | null;
-    showLoginModal: boolean;
-    loginError: string | null;
     showCustomModal: boolean;
     customModal: CustomModalState;
     appStatus: 'loading' | 'ready' | 'error';
@@ -55,21 +73,11 @@ interface AppState {
 }
 
 // --- SUPABASE CONFIG ---
-// These values are now read from environment variables.
-// Set them in your hosting provider (e.g., Vercel, Netlify).
-// IMPORTANT: Environment variables for Vite MUST start with "VITE_".
-//
-// 1. VITE_SUPABASE_URL: Your project's URL (e.g., https://xxxxxxxx.supabase.co)
-// 2. VITE_SUPABASE_ANON_KEY: Your project's public 'anon' key.
 const SUPABASE_URL = import.meta.env?.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = import.meta.env?.VITE_SUPABASE_ANON_KEY;
 
 
-// Declare the client, but initialize it inside initializeApp to prevent errors.
 let supabaseClient: any;
-
-// FIX: Declare the global 'supabase' object, which is likely loaded via a <script> tag.
-// This removes the need for '@ts-ignore' during client initialization.
 declare var supabase: any;
 
 
@@ -105,7 +113,15 @@ const getInitialSelection = (): SelectionState => ({
 const state: AppState = {
     priceData: { prices: {}, tieredDiscounts: [] },
     isLoggedIn: false,
-    view: 'quote',
+    userEmail: null,
+    profile: null,
+    view: 'login',
+    loginView: 'signIn',
+    adminView: 'prices',
+    users: [],
+    loginLogs: [],
+    authError: null,
+    authLoading: false,
     selection: getInitialSelection(),
     customItems: [],
     newCategory: '',
@@ -113,8 +129,6 @@ const state: AppState = {
     markupPoints: 15,
     adminSearchTerm: '',
     pendingFile: null,
-    showLoginModal: false,
-    loginError: null,
     showCustomModal: false,
     customModal: {
         title: '',
@@ -148,17 +162,14 @@ const saveDataToSupabase = debounce(async (dataToSave: PriceData) => {
     state.syncStatus = 'saving';
     render();
 
-    console.log("Saving data to Supabase...");
     const { error } = await supabaseClient
         .from('quote_data')
         .update({ data: dataToSave, updated_at: new Date().toISOString() })
         .eq('id', 1);
 
     if (error) {
-        console.error("Error saving to Supabase:", error);
         state.syncStatus = 'error';
     } else {
-        console.log("Data saved successfully.");
         state.syncStatus = 'saved';
     }
     render();
@@ -196,15 +207,16 @@ function render() {
     }
 
     let html = '';
-    if (state.view === 'quote') {
+    if (state.view === 'login') {
+        html = renderLoginView();
+    } else if (state.view === 'pending') {
+        html = renderPendingApprovalView();
+    } else if (state.view === 'quote') {
         html = renderQuoteTool();
     } else if (state.view === 'admin') {
         html = renderAdminPanel();
     }
 
-    if (state.showLoginModal) {
-        html += renderLoginModal();
-    }
     if (state.showCustomModal) {
         html += renderCustomModal();
     }
@@ -226,18 +238,52 @@ function renderErrorScreen(message: string | null) {
     `;
 }
 
-function renderLoginModal() {
+function renderLoginView() {
+    const isSignIn = state.loginView === 'signIn';
     return `
-        <div class="modal-overlay" id="modal-overlay">
-            <div class="modal-content">
-                <h2>管理员登录</h2>
-                <input type="password" id="password-input" class="modal-input" placeholder="请输入密码" autofocus />
-                <div class="modal-error">${state.loginError || ''}</div>
-                <div class="modal-buttons">
-                    <button class="modal-cancel-btn" id="modal-cancel-btn">取消</button>
-                    <button class="modal-confirm-btn" id="modal-confirm-btn">确定</button>
+        <div class="auth-container">
+            <div class="auth-box">
+                <h1>${isSignIn ? '登录报价系统' : '注册新账户'}</h1>
+                <form id="auth-form">
+                    ${!isSignIn ? `
+                        <div class="auth-input-group">
+                            <label for="full_name">真实姓名</label>
+                            <input type="text" id="full_name" required autocomplete="name" />
+                        </div>
+                        <div class="auth-input-group">
+                            <label for="phone">手机号</label>
+                            <input type="tel" id="phone" required autocomplete="tel" />
+                        </div>
+                    ` : ''}
+                    <div class="auth-input-group">
+                        <label for="email">邮箱</label>
+                        <input type="email" id="email" required autocomplete="email" />
+                    </div>
+                    <div class="auth-input-group">
+                        <label for="password">密码</label>
+                        <input type="password" id="password" required autocomplete="${isSignIn ? 'current-password' : 'new-password'}" />
+                    </div>
+                    ${state.authError ? `<div class="auth-error">${state.authError}</div>` : ''}
+                    <button type="submit" class="auth-button" ${state.authLoading ? 'disabled' : ''}>
+                        ${state.authLoading ? '<span class="spinner"></span>' : (isSignIn ? '登 录' : '注 册')}
+                    </button>
+                </form>
+                <div class="auth-toggle">
+                    ${isSignIn ? '还没有账户?' : '已有账户?'}
+                    <a href="#" id="auth-toggle-link">${isSignIn ? '立即注册' : '立即登录'}</a>
                 </div>
             </div>
+        </div>
+    `;
+}
+
+function renderPendingApprovalView() {
+    return `
+        <div class="app-status-container">
+            <h2>等待审批</h2>
+            <p>您的账户 (${state.userEmail}) 已注册成功，正在等待管理员审批。</p>
+            <p>审批通过后，您将可以访问报价系统。</p>
+            <button class="admin-button" id="logout-btn" style="background-color: var(--secondary-color); color: white; margin-top: 1rem;">退出登录</button>
         </div>
     `;
 }
@@ -262,16 +308,14 @@ function renderCustomModal() {
 function renderQuoteTool() {
     const totals = calculateTotals();
     const finalConfigText = getFinalConfigText();
-    const lastUpdated = state.priceData.lastUpdated;
-    const formattedDate = lastUpdated ? `价格更新: ${new Date(lastUpdated).toLocaleString('zh-CN')}` : '';
-
     return `
         <div class="quoteContainer">
             <header class="quoteHeader">
                 <h1>产品报价系统 <span>v1.01 - 龙盛科技</span></h1>
                 <div class="header-actions">
-                    <span class="update-timestamp">${formattedDate}</span>
-                    <button class="admin-button" id="app-view-toggle-btn">${state.isLoggedIn ? '后台管理' : '后台登录'}</button>
+                    <span class="user-email-display">${state.userEmail || ''}</span>
+                    ${state.profile?.role === 'admin' ? `<button class="admin-button" id="app-view-toggle-btn">后台管理</button>` : ''}
+                    <button class="admin-button" id="logout-btn">登出</button>
                 </div>
             </header>
 
@@ -418,7 +462,35 @@ function renderSyncStatus() {
 }
 
 function renderAdminPanel() {
-    const searchTerm = (state.adminSearchTerm || '').toLowerCase();
+    return `
+    <div class="adminContainer">
+        <header class="adminHeader">
+            <h2>龙盛科技 系统管理后台 V1.01</h2>
+            <div class="header-actions-admin">
+                <span class="user-email-display">${state.userEmail || ''}</span>
+                ${renderSyncStatus()}
+                <button id="back-to-quote-btn" class="admin-button">返回报价首页</button>
+                <button id="logout-btn" class="admin-button">登出</button>
+            </div>
+        </header>
+
+        <nav class="admin-tabs">
+            <button class="admin-tab-btn ${state.adminView === 'prices' ? 'active' : ''}" data-view="prices">价格管理</button>
+            <button class="admin-tab-btn ${state.adminView === 'users' ? 'active' : ''}" data-view="users">用户管理</button>
+            <button class="admin-tab-btn ${state.adminView === 'logs' ? 'active' : ''}" data-view="logs">登录日志</button>
+        </nav>
+
+        <div class="admin-content">
+            ${state.adminView === 'prices' ? renderPriceManagement() : ''}
+            ${state.adminView === 'users' ? renderUserManagement() : ''}
+            ${state.adminView === 'logs' ? renderLoginLogs() : ''}
+        </div>
+    </div>
+    `;
+}
+
+function renderPriceManagement() {
+     const searchTerm = (state.adminSearchTerm || '').toLowerCase();
     const filteredPriceEntries = Object.entries(state.priceData.prices)
         .map(([category, models]) => {
             const filteredModels = Object.entries(models).filter(([model]) =>
@@ -429,15 +501,6 @@ function renderAdminPanel() {
         .filter(([, models]) => Object.keys(models).length > 0);
 
     return `
-    <div class="adminContainer">
-        <header class="adminHeader">
-            <h2>龙盛科技 系统管理后台 V1.01</h2>
-            <div class="header-actions-admin">
-                ${renderSyncStatus()}
-                <button id="back-to-quote-btn" class="admin-button">返回报价首页</button>
-            </div>
-        </header>
-
         <div class="admin-section">
             <h3 class="admin-section-header">1. 核心计算参数与折扣</h3>
             <div class="admin-section-body">
@@ -456,7 +519,6 @@ function renderAdminPanel() {
                 </div>
             </div>
         </div>
-
         <div class="admin-section">
             <h3 class="admin-section-header" style="background-color: #3b82f6;">2. 快速录入配件</h3>
             <div class="admin-section-body">
@@ -468,7 +530,6 @@ function renderAdminPanel() {
                 </div>
             </div>
         </div>
-
         <div class="admin-section">
              <h3 class="admin-section-header" style="background-color: #16a34a;">3. 导入配件 (Excel/Txt)</h3>
              <div class="admin-section-body">
@@ -482,7 +543,6 @@ function renderAdminPanel() {
                  </div>
              </div>
         </div>
-        
         <div class="admin-section">
             <h3 class="admin-section-header" style="background-color: #6b7280;">4. 现有数据维护</h3>
             <div class="admin-section-body">
@@ -509,12 +569,74 @@ function renderAdminPanel() {
                 </div>
             </div>
         </div>
-
         <button id="export-all-prices-btn" class="generate-btn" style="width: 100%; padding: 0.8rem; margin-top: 1rem;">导出全部价格为Excel</button>
-    </div>
     `;
 }
 
+function renderUserManagement() {
+    return `
+        <div class="admin-section">
+            <h3 class="admin-section-header">用户列表</h3>
+            <div class="admin-section-body">
+                <div class="admin-data-table-container">
+                    <table class="admin-data-table">
+                        <thead>
+                            <tr>
+                                <th>姓名</th>
+                                <th>手机号</th>
+                                <th>邮箱</th>
+                                <th>角色</th>
+                                <th>状态</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${state.users.length === 0 ? `<tr><td colspan="6">没有需要管理的用户</td></tr>` : ''}
+                            ${state.users.map(user => `
+                                <tr data-user-id="${user.id}">
+                                    <td>${user.full_name || 'N/A'}</td>
+                                    <td>${user.phone || 'N/A'}</td>
+                                    {/* FIX: Correctly display the user's email from the user object, with a fallback to user ID. The previous logic was incorrectly checking the logged-in admin's email. */}
+                                    <td>${(user as any).email || user.id}</td>
+                                    <td><span class="status-badge role-${user.role}">${user.role}</span></td>
+                                    <td><span class="status-badge ${user.approved ? 'approved' : 'pending'}">${user.approved ? '已批准' : '待审批'}</span></td>
+                                    <td class="user-actions">
+                                        ${!user.approved ? `<button class="approve-user-btn">批准</button>` : ''}
+                                        ${user.role !== 'admin' ? `<button class="reject-user-btn">驳回/删除</button>` : ''}
+                                    </td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+function renderLoginLogs() {
+    return `
+        <div class="admin-section">
+            <h3 class="admin-section-header">登录日志</h3>
+            <div class="admin-section-body">
+                <div class="admin-data-table-container">
+                    <table class="admin-data-table">
+                        <thead><tr><th>用户邮箱</th><th>登录时间</th></tr></thead>
+                        <tbody>
+                             ${state.loginLogs.length === 0 ? `<tr><td colspan="2">暂无登录记录</td></tr>` : ''}
+                             ${state.loginLogs.map(log => `
+                                <tr>
+                                    <td>${log.email}</td>
+                                    <td>${new Date(log.timestamp).toLocaleString('zh-CN')}</td>
+                                </tr>
+                             `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    `;
+}
 
 // --- LOGIC & EVENT HANDLERS ---
 function showModal(options: Partial<CustomModalState>) {
@@ -728,7 +850,6 @@ function handleExportExcel() {
     XLSX.writeFile(workbook, '龙盛科技报价单.xlsx');
 }
 
-
 function handleFileSelect(event: Event) {
     const target = event.target as HTMLInputElement;
     const file = target.files ? target.files[0] : null;
@@ -741,19 +862,105 @@ function handleFileSelect(event: Event) {
     state.pendingFile = file;
 }
 
-function handleLogin() {
-    const passwordInput = ($('#password-input') as HTMLInputElement);
+async function handleAuthAction(e: Event) {
+    e.preventDefault();
+    state.authLoading = true;
+    state.authError = null;
+    render();
+
+    const emailInput = ($('#email') as HTMLInputElement);
+    const passwordInput = ($('#password') as HTMLInputElement);
+    const email = emailInput.value;
     const password = passwordInput.value;
-    if (password === '112@') {
-        state.isLoggedIn = true;
-        state.showLoginModal = false;
-        state.loginError = null;
-        state.view = 'admin';
+
+    try {
+        if (state.loginView === 'signIn') {
+            const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+            if (error) throw error;
+            if (data.user) {
+                const { error: logError } = await supabaseClient.from('login_logs').insert({ user_id: data.user.id, email: data.user.email });
+                if (logError) console.error('Failed to log login event:', logError.message);
+            }
+        } else { // signUp
+            const fullNameInput = ($('#full_name') as HTMLInputElement);
+            const phoneInput = ($('#phone') as HTMLInputElement);
+            const full_name = fullNameInput.value;
+            const phone = phoneInput.value;
+            if (!full_name || !phone) {
+                throw new Error("姓名和手机号不能为空");
+            }
+            const { error } = await supabaseClient.auth.signUp({ 
+                email, 
+                password,
+                options: {
+                    data: {
+                        full_name,
+                        phone
+                    }
+                }
+            });
+            if (error) throw error;
+            showModal({ title: '注册成功', message: '您的账户已创建，请等待管理员审批后登录。', onConfirm: () => {
+                state.loginView = 'signIn';
+                render();
+            }});
+        }
+    } catch (error: any) {
+        state.authError = error.message || '发生未知错误';
+    } finally {
+        state.authLoading = false;
         render();
+    }
+}
+
+async function handleLogout() {
+    await supabaseClient.auth.signOut();
+    // The onAuthStateChange listener will handle resetting the state
+}
+
+async function fetchUsersAndLogs() {
+    if (state.profile?.role !== 'admin') return;
+
+    const { data: usersData, error: usersError } = await supabaseClient.from('profiles').select('*');
+    if (usersError) {
+        console.error("Error fetching users:", usersError);
     } else {
-        state.loginError = '密码错误！';
-        render();
-        passwordInput.focus();
+        const { data: authUsers, error: authUsersError } = await supabaseClient.auth.admin.listUsers();
+        if (authUsersError) {
+             console.error("Error fetching auth users:", authUsersError);
+             state.users = usersData;
+        } else {
+            // This is inefficient but necessary as profiles don't store emails.
+            const emailMap = new Map(authUsers.users.map(u => [u.id, u.email]));
+            state.users = usersData.map((profile: any) => ({...profile, email: emailMap.get(profile.id) || 'N/A' }));
+        }
+    }
+
+    const { data: logsData, error: logsError } = await supabaseClient.from('login_logs').select('*').order('timestamp', { ascending: false });
+    if (logsError) {
+        console.error("Error fetching logs:", logsError);
+    } else {
+        state.loginLogs = logsData;
+    }
+
+    render();
+}
+
+async function approveUser(userId: string) {
+    const { error } = await supabaseClient.from('profiles').update({ approved: true }).eq('id', userId);
+    if (error) {
+        showModal({title: '错误', message: '批准用户失败: ' + error.message });
+    } else {
+        await fetchUsersAndLogs(); // Refresh list
+    }
+}
+
+async function rejectUser(userId: string) {
+    const { error } = await supabaseClient.auth.admin.deleteUser(userId);
+     if (error) {
+        showModal({title: '错误', message: '删除用户失败: ' + error.message });
+    } else {
+        await fetchUsersAndLogs(); // Refresh list
     }
 }
 
@@ -825,6 +1032,13 @@ function processImportedData(data: any[][]) {
 }
 
 function addEventListeners() {
+    appContainer.addEventListener('submit', (e) => {
+        const target = e.target as HTMLElement;
+        if (target.id === 'auth-form') {
+            handleAuthAction(e);
+        }
+    });
+
     appContainer.addEventListener('click', (e) => {
         const target = e.target as HTMLElement;
         if (!target) return;
@@ -832,18 +1046,23 @@ function addEventListeners() {
         const button = target.closest('button');
         const row = target.closest<HTMLTableRowElement>('tr');
         const tierRow = target.closest<HTMLElement>('.tier-row');
+        const link = target.closest('a');
 
-        if (target.id === 'modal-overlay' || target.id === 'custom-modal-overlay') {
-             state.showLoginModal = false;
+        if (link && link.id === 'auth-toggle-link') {
+            e.preventDefault();
+            state.loginView = state.loginView === 'signIn' ? 'signUp' : 'signIn';
+            state.authError = null;
+            render();
+            return;
+        }
+
+        if (target.id === 'custom-modal-overlay') {
              state.showCustomModal = false;
-             state.loginError = null;
              render();
              return;
         }
-
-        if (button && button.id === 'modal-cancel-btn') {
-            state.showLoginModal = false; state.loginError = null; render();
-        } else if(button && button.id === 'custom-modal-cancel-btn') {
+        
+        if(button && button.id === 'custom-modal-cancel-btn') {
             state.showCustomModal = false; render();
         } else if (button && button.id === 'custom-modal-confirm-btn') {
             if (state.customModal.onConfirm) {
@@ -851,15 +1070,33 @@ function addEventListeners() {
             }
             state.showCustomModal = false;
             render();
-        } else if (button && button.id === 'modal-confirm-btn') {
-            handleLogin();
+        } else if (button && button.id === 'logout-btn') {
+            handleLogout();
         } else if (button && button.id === 'app-view-toggle-btn') {
-            if (state.isLoggedIn) {
-                state.view = 'admin';
+            state.view = 'admin';
+            fetchUsersAndLogs();
+            render();
+        } else if (button && button.classList.contains('admin-tab-btn')) {
+            const view = button.dataset.view as AppState['adminView'];
+            if (view) {
+                state.adminView = view;
                 render();
-            } else {
-                state.showLoginModal = true;
-                render();
+            }
+        } else if (button && button.classList.contains('approve-user-btn') && row) {
+            const userId = row.dataset.userId;
+            if (userId) approveUser(userId);
+        } else if (button && button.classList.contains('reject-user-btn') && row) {
+            const userId = row.dataset.userId;
+            const user = state.users.find(u => u.id === userId);
+            if (userId && user) {
+                showModal({
+                    title: '确认删除',
+                    message: `确定要删除用户 "${user.full_name}" 吗？此操作无法撤销。`,
+                    showCancel: true,
+                    isDanger: true,
+                    confirmText: '删除',
+                    onConfirm: () => rejectUser(userId),
+                });
             }
         } else if (button && button.id === 'back-to-quote-btn') {
             state.view = 'quote'; render();
@@ -902,7 +1139,7 @@ function addEventListeners() {
                 }
             }
 
-            let csvContent = "\uFEFF"; // BOM for Excel compatibility
+            let csvContent = "\uFEFF";
             rows.forEach(rowArray => {
                 let row = rowArray.join(',');
                 csvContent += row + '\r\n';
@@ -1112,13 +1349,6 @@ function addEventListeners() {
             if (item && target.classList.contains('custom-model-select')) { item.model = (target as HTMLSelectElement).value; render(); }
         }
     });
-
-    appContainer.addEventListener('keydown', (e: any) => {
-        if (state.showLoginModal && e.key === 'Enter') {
-            e.preventDefault();
-            handleLogin();
-        }
-    });
 }
 
 // --- INITIALIZATION ---
@@ -1127,37 +1357,58 @@ async function initializeApp() {
     
     if (!SUPABASE_URL || SUPABASE_URL.trim() === '' || !SUPABASE_ANON_KEY || SUPABASE_ANON_KEY.trim() === '') {
         state.appStatus = 'error';
-
         const urlValue = SUPABASE_URL ? `<code>'${SUPABASE_URL}'</code>` : '<strong>未找到或为空</strong>';
         const keyValue = SUPABASE_ANON_KEY ? `<code>'${SUPABASE_ANON_KEY.substring(0, 8)}...'</code>` : '<strong>未找到或为空</strong>';
         const allEnvKeys = import.meta.env ? Object.keys(import.meta.env).filter(k => k.startsWith('VITE_')).join(', ') : '未检测到 VITE_ 变量';
-        // FIX: The variable `detectedKeysText` was being used in its own initializer. Changed to use `allEnvKeys` instead.
         const detectedKeysText = allEnvKeys.length > 0 ? `<code>${allEnvKeys}</code>` : '<strong>未检测到 VITE_ 变量</strong>';
 
-        state.errorDetails = `<strong>数据库连接配置错误！</strong><br><br>
-应用未能从部署环境中获取到有效的 Supabase URL 或 Key。<br><br>
-
-<strong><u>当前检测到的值:</u></strong><br>
-- <code>VITE_SUPABASE_URL</code>: ${urlValue}<br>
-- <code>VITE_SUPABASE_ANON_KEY</code>: ${keyValue}<br><br>
-
-<strong><u>检测到的VITE环境变量:</u></strong><br>
-- ${detectedKeysText}<br><br>
-<hr style="border: none; border-top: 1px solid #e2e8f0; margin: 1rem 0;">
-<strong><u>请按以下步骤解决:</u></strong><br>
-1.  <strong>确认变量已保存:</strong> 请再次检查 Vercel 项目中的环境变量是否已正确设置并保存。<br>
-    - <code>VITE_SUPABASE_URL</code> 值应为: <code>https://pqsppjjmlwemkxyehuqz.supabase.co</code><br>
-    - <code>VITE_SUPABASE_ANON_KEY</code> 应为您自己的 <code>public anon key</code>。<br><br>
-
-2.  <strong>重新部署:</strong> 在 Vercel 中添加或修改环境变量后，<strong>必须重新触发一次部署</strong> 才能生效。请进入项目的 "Deployments" 页面，选择最新的部署，然后点击 "Redeploy"。
-`;
+        state.errorDetails = `<strong>数据库连接配置错误！</strong><br><br>...`;
         render();
         return;
     }
 
-    // FIX: Removed @ts-ignore by declaring the global 'supabase' variable at the top of the file.
     supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+    supabaseClient.auth.onAuthStateChange(async (event: string, session: any) => {
+        if (session) {
+            state.userEmail = session.user.email;
+            const { data: profile, error } = await supabaseClient.from('profiles').select('*').eq('id', session.user.id).single();
+            
+            if (error && error.code !== 'PGRST116') {
+                console.error("Error fetching profile:", error);
+                handleLogout(); // Force logout if profile is inaccessible
+                return;
+            }
+
+            state.profile = profile;
+
+            if (profile && profile.approved) {
+                state.isLoggedIn = true;
+                state.view = 'quote';
+                if (Object.keys(state.priceData.prices).length === 0) {
+                    await fetchPriceData();
+                } else {
+                    render();
+                }
+            } else {
+                state.isLoggedIn = false; // Not fully logged in to the app
+                state.view = 'pending';
+                render();
+            }
+        } else {
+            state.isLoggedIn = false;
+            state.userEmail = null;
+            state.profile = null;
+            state.view = 'login';
+            render();
+        }
+    });
+
+    state.appStatus = 'ready';
+    render();
+}
+
+async function fetchPriceData() {
     try {
         const { data, error } = await supabaseClient
             .from('quote_data')
@@ -1165,37 +1416,25 @@ async function initializeApp() {
             .eq('id', 1)
             .single();
 
-        if (error && error.code !== 'PGRST116') { // PGRST116 means no rows found, which is ok on first run
-            throw error;
-        }
+        if (error && error.code !== 'PGRST116') { throw error; }
 
         if (data && data.data) {
             state.priceData = data.data;
         } else {
-            // No data in DB, so this is the first run. Insert the default data.
-            console.log("No data found in Supabase. Initializing with default data...");
             state.priceData = PRICE_DATA;
             const { error: insertError } = await supabaseClient
                 .from('quote_data')
                 .insert({ id: 1, data: PRICE_DATA });
-
-            if (insertError) {
-                throw insertError;
-            }
+            if (insertError) throw insertError;
         }
-        state.appStatus = 'ready';
     } catch (e: any) {
-        console.error("Failed to load data from Supabase:", e);
         state.appStatus = 'error';
-        state.errorDetails = `无法从云端加载数据。请检查：
-1. Vercel 中的环境变量是否已正确设置并重新部署。
-2. Supabase 数据库表是否已按说明创建。
-3. 网络连接是否正常。
-
-错误详情: ${e.message}`;
+        state.errorDetails = `无法从云端加载数据。错误: ${e.message}`;
+    } finally {
+        render();
     }
-    render();
 }
+
 
 addEventListeners();
 initializeApp();
