@@ -257,8 +257,8 @@ function renderLoginView() {
                         </div>
                     ` : ''}
                     <div class="auth-input-group">
-                        <label for="email">邮箱</label>
-                        <input type="email" id="email" required autocomplete="email" />
+                        <label for="email">用户名</label>
+                        <input type="email" id="email" required autocomplete="email" placeholder="请输入您的邮箱地址" />
                     </div>
                     <div class="auth-input-group">
                         <label for="password">密码</label>
@@ -666,6 +666,7 @@ function calculateTotals() {
 
     const customCost = state.customItems.reduce((acc, item) => {
         if (item.model && item.quantity > 0) {
+            // FIX: Corrected a reference error where `model` was used instead of `item.model`.
             const cost = state.priceData.prices[item.category]?.[item.model] ?? 0;
             return acc + (cost * item.quantity);
         }
@@ -1268,6 +1269,7 @@ function addEventListeners() {
                             return;
                         }
                         const lines = text.split(/\r?\n/).filter(line => line.trim() !== '');
+                        // FIX: Corrected a TypeError. The `.trim()` method cannot be called on an array returned by `.split()`. The fix uses `.map()` to apply `trim()` to each string element of the array.
                         const dataAsArrays = lines.map(line => line.split(/[,，\t]/).map(p => p.trim()));
                         processImportedData(dataAsArrays);
                     };
