@@ -1,4 +1,5 @@
 {
   "name": "Quick Quote System",
-  "description": "An intuitive web application for generating instant project quotes. Users select from various services and features, and the system calculates the total cost. It then leverages the Gemini API to generate a professional, formatted quote summary."
+  "description": "An intuitive web application for generating instant project quotes. Users select from various services and features, and the system calculates the total cost. It then leverages the Gemini API to generate a professional, formatted quote summary.",
+  "requestFramePermissions": []
 }

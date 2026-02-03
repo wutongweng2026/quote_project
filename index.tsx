@@ -1,5 +1,4 @@
 
-
 // --- DATA (Embedded) & CONFIG ---
 const CONFIG_ROWS = ['主机', '内存', '硬盘', '硬盘2', '显卡', '电源', '显示器'];
 
@@ -223,80 +222,117 @@ function renderAddCategoryRow() {
     `;
 }
 
-// Fix: Define the missing renderAdminPanel function
 function renderAdminPanel() {
-    const searchTerm = state.adminSearchTerm.toLowerCase();
-    
-    // Fix: Define and calculate filteredPriceEntries
-    // This logic filters the price data based on the search term.
-    // It returns entries where either the category or a model name includes the search term.
+    const allCategories = Object.keys(state.priceData.prices);
+    const searchTerm = (state.adminSearchTerm || '').toLowerCase();
     const filteredPriceEntries = Object.entries(state.priceData.prices)
         .map(([category, models]) => {
-            if (category.toLowerCase().includes(searchTerm)) {
-                return [category, models]; // Return all models if category matches
-            }
-            const filteredModels = Object.fromEntries(
-                Object.entries(models).filter(([model]) =>
-                    model.toLowerCase().includes(searchTerm)
-                )
+            const filteredModels = Object.entries(models).filter(([model]) =>
+                category.toLowerCase().includes(searchTerm) || model.toLowerCase().includes(searchTerm)
             );
-            if (Object.keys(filteredModels).length > 0) {
-                return [category, filteredModels]; // Return only matching models
-            }
-            return null;
+            return [category, Object.fromEntries(filteredModels)];
         })
-        .filter(Boolean);
+        .filter(([, models]) => Object.keys(models).length > 0);
 
     return `
-    <div class="admin-container">
-        <header class="admin-header">
-            <h1>后台管理</h1>
-            <button id="back-to-quote-btn" class="admin-button">返回报价</button>
+    <div class="adminContainer">
+        <header class="adminHeader">
+            <h2>龙盛科技 系统管理后台 V1.01</h2>
+            <button id="back-to-quote-btn" class="admin-button">返回报价首页</button>
         </header>
-        <main class="admin-body">
-             <div class="admin-section">
-                 <h3 class="admin-section-header" style="background-color: #16a34a;">3. 导入配件 (Excel/Txt)</h3>
-                 <div class="admin-section-body">
-                     <div class="import-form">
-                        <label for="import-file-input" class="import-file-label">
-                            选择文件
-                            <input type="file" id="import-file-input" accept=".txt,.csv" />
-                        </label>
-                        <span id="file-name-display">未选择文件</span>
-                        <button id="import-btn">执行批量导入</button>
-                     </div>
-                 </div>
-            </div>
-            
-            <div class="admin-section">
-                <h3 class="admin-section-header" style="background-color: #6b7280;">4. 现有数据维护</h3>
-                <div class="admin-section-body">
-                    <input type="search" id="admin-search-input" placeholder="输入型号或分类名称搜索..." value="${state.adminSearchTerm}" />
-                    <div style="max-height: 400px; overflow-y: auto;">
-                        <table class="admin-data-table">
-                            <thead><tr><th>分类</th><th>型号</th><th>单价</th><th>操作</th></tr></thead>
-                            <tbody>
-                                ${filteredPriceEntries.map(([category, models]) => 
-                                    Object.entries(models).map(([model, price]) => `
-                                        <tr data-category="${category}" data-model="${model}">
-                                            <td>${category}</td>
-                                            <td>${model}</td>
-                                            <td><input type="number" class="price-input" value="${price}" /></td>
-                                            <td>
-                                                <button class="admin-save-item-btn">保存</button>
-                                                <button class="admin-delete-item-btn">删除</button>
-                                            </td>
-                                        </tr>
-                                    `).join('')
-                                ).join('') || `<tr><td colspan="4" style="text-align:center;">未找到匹配项</td></tr>`}
-                            </tbody>
-                        </table>
+
+        <div class="admin-section">
+            <h3 class="admin-section-header">1. 核心计算参数与折扣</h3>
+            <div class="admin-section-body">
+                <div class="margin-options-section">
+                    <label style="display: block; font-weight: 500; margin-bottom: 0.5rem;">预留加价倍率设置 (选择默认值):</label>
+                    <div id="margin-options-list">
+                    ${(state.priceData.marginOptions || []).map((opt, index) => `
+                        <div class="margin-option-row" data-index="${index}">
+                            <input type="radio" name="default-margin" class="margin-default-radio" value="${opt.value}" ${state.priceData.settings.margin === opt.value ? 'checked' : ''} />
+                            <input type="text" class="margin-label-input" value="${opt.label}" placeholder="标签" />
+                            <input type="number" step="0.01" class="margin-value-input" value="${opt.value}" placeholder="倍率" />
+                            <button class="remove-margin-btn">删除</button>
+                        </div>
+                    `).join('')}
                     </div>
+                    <button id="add-margin-btn" class="add-margin-btn">+ 添加倍率</button>
+                </div>
+                <div class="tiered-discount-section">
+                    <label style="display: block; font-weight: 500; margin-bottom: 0.5rem;">N件N折阶梯价设置:</label>
+                    <div id="tier-list">
+                    ${(state.priceData.tieredDiscounts || []).map(tier => `
+                        <div class="tier-row" data-tier-id="${tier.id}">
+                            <span>满</span> <input type="number" class="tier-threshold" value="${tier.threshold}" placeholder="数量" /> <span>件, 打</span>
+                            <input type="number" class="tier-rate" step="0.01" value="${tier.rate}" placeholder="折扣" /> <span>折</span>
+                            <button class="remove-tier-btn">删除</button>
+                        </div>
+                    `).join('')}
+                    </div>
+                    <button id="add-tier-btn" class="add-tier-btn">+ 添加阶梯</button>
+                </div>
+                 <button id="save-params-btn" class="admin-save-section-btn">保存倍率与阶梯折扣</button>
+            </div>
+        </div>
+
+        <div class="admin-section">
+            <h3 class="admin-section-header" style="background-color: #3b82f6;">2. 快速录入配件</h3>
+            <div class="admin-section-body">
+                <div class="quick-add-form">
+                     <select id="quick-add-category">
+                        ${allCategories.map(cat => `<option value="${cat}">${cat}</option>`).join('')}
+                        <option value="--new--">-- 添加新分类 --</option>
+                     </select>
+                     <input type="text" id="quick-add-new-category" style="display:none;" placeholder="新分类名" />
+                     <input type="text" id="quick-add-model" placeholder="型号名称" />
+                     <input type="number" id="quick-add-price" placeholder="成本单价" />
+                     <button id="quick-add-btn">确认添加</button>
                 </div>
             </div>
+        </div>
 
-            <button id="save-config-btn" class="generate-btn" style="width: 100%; padding: 0.8rem; margin-top: 1rem;">保存全部配置并下载</button>
-        </main>
+        <div class="admin-section">
+             <h3 class="admin-section-header" style="background-color: #16a34a;">3. 导入配件 (Excel/Txt)</h3>
+             <div class="admin-section-body">
+                 <div class="import-form">
+                    <label for="import-file-input" class="import-file-label">
+                        选择文件
+                        <input type="file" id="import-file-input" accept=".txt,.csv" />
+                    </label>
+                    <span id="file-name-display">未选择文件</span>
+                    <button id="import-btn">执行批量导入</button>
+                 </div>
+             </div>
+        </div>
+        
+        <div class="admin-section">
+            <h3 class="admin-section-header" style="background-color: #6b7280;">4. 现有数据维护</h3>
+            <div class="admin-section-body">
+                <input type="search" id="admin-search-input" placeholder="输入型号或分类名称搜索..." value="${state.adminSearchTerm}" />
+                <div style="max-height: 400px; overflow-y: auto;">
+                    <table class="admin-data-table">
+                        <thead><tr><th>分类</th><th>型号</th><th>单价</th><th>操作</th></tr></thead>
+                        <tbody>
+                            ${filteredPriceEntries.map(([category, models]) => 
+                                Object.entries(models).map(([model, price]) => `
+                                    <tr data-category="${category}" data-model="${model}">
+                                        <td>${category}</td>
+                                        <td>${model}</td>
+                                        <td><input type="number" class="price-input" value="${price}" /></td>
+                                        <td>
+                                            <button class="admin-save-item-btn">保存</button>
+                                            <button class="admin-delete-item-btn">删除</button>
+                                        </td>
+                                    </tr>
+                                `).join('')
+                            ).join('') || `<tr><td colspan="4" style="text-align:center;">未找到匹配项</td></tr>`}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <button id="save-config-btn" class="generate-btn" style="width: 100%; padding: 0.8rem; margin-top: 1rem;">保存全部配置并下载</button>
     </div>
     `;
 }
@@ -453,16 +489,20 @@ function handleExportExcel() {
             const cost = state.priceData.prices[category]?.[model] ?? 0;
             const subtotal = cost * quantity;
             costTotal += subtotal;
-            rows.push([category, model, String(cost), String(quantity), String(subtotal)]);
+// FIX: Changed number to string conversion from `String(value)` to `value.toString()`
+// to avoid potential issues with the global `String` object being shadowed.
+            rows.push([category, model, cost.toString(), quantity.toString(), subtotal.toString()]);
         }
     });
 
     rows.push([]); 
-    rows.push(['', '', '', '总成本', String(costTotal)]);
-    rows.push(['', '', '', '点位', String(state.selectedMargin)]);
-    rows.push(['', '', '', '折扣', String(state.discountRate)]);
-    rows.push(['', '', '', '特别立减', String(state.specialDiscount)]);
-    rows.push(['', '', '', '最终报价', String(totals.finalPrice)]);
+// FIX: Changed number to string conversion from `String(value)` to `value.toString()`
+// to avoid potential issues with the global `String` object being shadowed.
+    rows.push(['', '', '', '总成本', costTotal.toString()]);
+    rows.push(['', '', '', '点位', state.selectedMargin.toString()]);
+    rows.push(['', '', '', '折扣', state.discountRate.toString()]);
+    rows.push(['', '', '', '特别立减', state.specialDiscount.toString()]);
+    rows.push(['', '', '', '最终报价', totals.finalPrice.toString()]);
 
     let csvContent = "\uFEFF"; 
     
@@ -757,7 +797,12 @@ async function initializeApp() {
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
-        state.priceData = await response.json();
+        const priceData = await response.json();
+        state.priceData = priceData;
+        
+        if (!state.priceData || !state.priceData.prices) {
+             throw new Error("Price data is malformed or missing.");
+        }
         if (state.priceData.discounts && state.priceData.discounts.length > 0) {
             state.discountRate = state.priceData.discounts[0].rate;
         }
