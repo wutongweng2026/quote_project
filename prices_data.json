@@ -1,8 +1,22 @@
 
 {
   "settings": {
-    "margin": 1.2
+    "margin": 1.15
   },
+  "marginOptions": [
+    {
+      "label": "标准 (1.15)",
+      "value": 1.15
+    },
+    {
+      "label": "中等 (1.20)",
+      "value": 1.2
+    },
+    {
+      "label": "较高 (1.30)",
+      "value": 1.3
+    }
+  ],
   "prices": {
     "内存": {
       "8G DDR5 5600": 750,
@@ -60,5 +74,11 @@
       "rate": 0.99
     }
   ],
-  "tieredDiscounts": []
+  "tieredDiscounts": [
+    {
+      "id": 1721360183321,
+      "threshold": 10,
+      "rate": 0.99
+    }
+  ]
 }

@@ -35,7 +35,7 @@ const appContainer = $('#app');
 // --- RENDER FUNCTIONS ---
 function render() {
     if (!state.priceData) {
-        appContainer.innerHTML = `<h1>正在加载价格数据...</h1>`;
+        appContainer.innerHTML = `<div class="loading-container"><h2>正在加载价格数据...</h2></div>`;
         return;
     }
 
@@ -78,7 +78,9 @@ function renderQuoteTool() {
         <div class="quoteContainer">
             <header class="quoteHeader">
                 <h1>产品报价系统 <span>v1.01 -- 龙盛科技</span></h1>
-                <button class="admin-button" id="app-view-toggle-btn">${state.isLoggedIn ? '后台管理' : '后台登录'}</button>
+                <div class="header-actions">
+                    <button class="admin-button" id="app-view-toggle-btn">${state.isLoggedIn ? '后台管理' : '后台登录'}</button>
+                </div>
             </header>
 
             <main class="quoteBody">
@@ -134,6 +136,7 @@ function renderQuoteTool() {
             <footer class="quoteFooter">
                 <div class="footer-buttons">
                     <button class="reset-btn" id="reset-btn">重置</button>
+                    <button class="feedback-btn" id="feedback-btn">反馈意见</button>
                     <button class="generate-btn" id="generate-quote-btn">生成报价单</button>
                 </div>
                 <div class="final-price-display">
@@ -225,9 +228,19 @@ function renderAdminPanel() {
         <div class="admin-section">
             <h3 class="admin-section-header">1. 核心计算参数与折扣</h3>
             <div class="admin-section-body">
-                <div class="adminForm" style="margin-bottom: 1.5rem;">
-                   <label>预留加价倍率:</label>
-                   <input type="number" step="0.01" value="${state.priceData.settings.margin}" class="admin-margin-input" />
+                <div class="margin-options-section">
+                    <label style="display: block; font-weight: 500; margin-bottom: 0.5rem;">预留加价倍率设置 (选择默认值):</label>
+                    <div id="margin-options-list">
+                    ${(state.priceData.marginOptions || []).map((opt, index) => `
+                        <div class="margin-option-row" data-index="${index}">
+                            <input type="radio" name="default-margin" class="margin-default-radio" value="${opt.value}" ${state.priceData.settings.margin === opt.value ? 'checked' : ''} />
+                            <input type="text" class="margin-label-input" value="${opt.label}" placeholder="标签" />
+                            <input type="number" step="0.01" class="margin-value-input" value="${opt.value}" placeholder="倍率" />
+                            <button class="remove-margin-btn">删除</button>
+                        </div>
+                    `).join('')}
+                    </div>
+                    <button id="add-margin-btn" class="add-margin-btn">+ 添加倍率</button>
                 </div>
                 <div class="tiered-discount-section">
                     <label style="display: block; font-weight: 500; margin-bottom: 0.5rem;">N件N折阶梯价设置:</label>
@@ -448,6 +461,7 @@ function addEventListeners() {
         const button = target.closest('button');
         const row = target.closest('tr');
         const tierRow = target.closest('.tier-row');
+        const marginRow = target.closest('.margin-option-row');
 
         if (target.id === 'modal-overlay' || (button && button.id === 'modal-cancel-btn')) {
              state.showLoginModal = false;
@@ -496,6 +510,11 @@ function addEventListeners() {
             handleMatchConfig();
         } else if (button.id === 'generate-quote-btn') {
             handleGenerateQuoteText();
+        } else if (button.id === 'feedback-btn') {
+            const email = 'your-email@example.com'; // TODO: Replace with your actual feedback email
+            const subject = '产品报价系统用户反馈';
+            const body = '你好，\n\n我对产品报价系统有以下建议或问题：\n\n';
+            window.location.href = `mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
         } else if (button.id === 'save-config-btn') {
             const dataStr = JSON.stringify(state.priceData, null, 2);
             const blob = new Blob([dataStr], {type: "application/json"});
@@ -534,6 +553,19 @@ function addEventListeners() {
         } else if (button.classList.contains('remove-tier-btn') && tierRow) {
             const tierId = Number(tierRow.dataset.tierId);
             state.priceData.tieredDiscounts = state.priceData.tieredDiscounts.filter(t => t.id !== tierId);
+            render();
+        } else if (button.id === 'add-margin-btn') {
+            state.priceData.marginOptions.push({ label: '新倍率', value: 1.0 });
+            render();
+        } else if (button.classList.contains('remove-margin-btn') && marginRow) {
+            const index = parseInt(marginRow.dataset.index, 10);
+            const wasDefault = state.priceData.marginOptions[index].value === state.priceData.settings.margin;
+            state.priceData.marginOptions.splice(index, 1);
+            if (wasDefault && state.priceData.marginOptions.length > 0) {
+                state.priceData.settings.margin = state.priceData.marginOptions[0].value;
+            } else if (state.priceData.marginOptions.length === 0) {
+                state.priceData.settings.margin = 1.0;
+            }
             render();
         } else if (button.id === 'save-params-btn') {
             alert('参数已在输入时自动保存，可直接下载全部配置。');
@@ -579,10 +611,9 @@ function addEventListeners() {
         const { target } = e;
         const row = target.closest('tr');
         const tierRow = target.closest('.tier-row');
-
+        
         if (target.id === 'new-category-input') { state.newCategory = target.value; return; }
         if (target.id === 'admin-search-input') { state.adminSearchTerm = target.value; render(); return; }
-        if (target.matches('.admin-margin-input')) { state.priceData.settings.margin = Number(target.value); return; }
 
         if (tierRow) {
             const tierId = Number(tierRow.dataset.tierId);
@@ -611,10 +642,26 @@ function addEventListeners() {
     appContainer.addEventListener('change', (e) => {
         const { target } = e;
         const row = target.closest('tr');
+        const marginRow = target.closest('.margin-option-row');
 
         if (target.id === 'import-file-input') { handleFileSelect(e); return; }
         
-        if (target.id === 'quick-add-category') {
+        if (target.classList.contains('margin-default-radio')) {
+            state.priceData.settings.margin = Number(target.value);
+        } else if (marginRow && (target.classList.contains('margin-label-input') || target.classList.contains('margin-value-input'))) {
+            const index = parseInt(marginRow.dataset.index, 10);
+            const option = state.priceData.marginOptions[index];
+            const oldValue = option.value;
+            
+            option.label = marginRow.querySelector('.margin-label-input').value;
+            const newValue = parseFloat(marginRow.querySelector('.margin-value-input').value);
+            option.value = isNaN(newValue) ? 0 : newValue;
+
+            if (state.priceData.settings.margin === oldValue) {
+                state.priceData.settings.margin = option.value;
+            }
+            render();
+        } else if (target.id === 'quick-add-category') {
             $('#quick-add-new-category').style.display = target.value === '--new--' ? 'block' : 'none';
         } else if (row && row.dataset.category) {
             const category = row.dataset.category;
@@ -637,5 +684,24 @@ function addEventListeners() {
 }
 
 // --- INITIALIZATION ---
+async function initializeApp() {
+    render(); // Initial render to show loading message
+    try {
+        const response = await fetch('./prices_data.json');
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        state.priceData = await response.json();
+        if (state.priceData.discounts && state.priceData.discounts.length > 0) {
+            state.discountRate = state.priceData.discounts[0].rate;
+        }
+    } catch (error) {
+        console.error("Could not load price data:", error);
+        appContainer.innerHTML = `<div class="loading-container error"><h1>加载价格数据失败</h1><p>请检查 'prices_data.json' 文件是否存在且格式正确。</p></div>`;
+        return;
+    }
+    render(); // Re-render with the loaded data
+}
+
 addEventListeners();
-render();
+initializeApp();

@@ -37,6 +37,22 @@
             box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
             overflow: hidden;
         }
+        .loading-container {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            min-height: 300px;
+            text-align: center;
+            padding: 2rem;
+            color: var(--secondary-text-color);
+        }
+        .loading-container.error h1 {
+            color: var(--error-color);
+        }
+        .loading-container h2 {
+            font-weight: 500;
+        }
         .quoteHeader {
             background-color: var(--primary-color);
             color: white;
@@ -47,6 +63,11 @@
         }
         .quoteHeader h1 { margin: 0; font-size: 1.75rem; }
         .quoteHeader span { font-size: 0.9rem; opacity: 0.8; }
+        .header-actions {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
         .admin-button {
             background: rgba(255,255,255,0.2);
             border: 1px solid rgba(255,255,255,0.5);
@@ -140,6 +161,7 @@
         .footer-buttons button { padding: 0.75rem 1.5rem; font-size: 1.1rem; border-radius: 8px; border: none; cursor: pointer; color: white; transition: background 0.2s; }
         .reset-btn { background-color: var(--error-color); }
         .generate-btn { background-color: var(--primary-color); }
+        .feedback-btn { background-color: var(--secondary-color); }
         .final-price-display { text-align: right; }
         .final-price-display span { display: block; font-size: 1rem; color: var(--secondary-text-color); }
         .final-price-display strong { font-size: 2.5rem; color: var(--error-color); font-weight: 700; }
@@ -185,7 +207,7 @@
         .admin-section-body { padding: 1.2rem; }
         .adminForm { display: flex; align-items: center; gap: 1rem; }
         .adminForm label { font-weight: 500; white-space: nowrap; }
-        .admin-margin-input { max-width: 150px; }
+        .admin-margin-input, .admin-margin-select { max-width: 150px; }
         .quick-add-form, .import-form { display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap; }
         .quick-add-form > *, .import-form > * { flex-shrink: 0; }
         .quick-add-form select { flex-grow: 1; min-width: 120px; }
@@ -203,10 +225,15 @@
         .quick-add-form button, #import-btn { background-color: var(--secondary-color); border: none; color: white; padding: 0.6rem 1.2rem; border-radius: 6px; cursor: pointer; }
         .admin-save-section-btn { background-color: var(--secondary-color); color: white; border: none; padding: 0.7rem 1.5rem; border-radius: 6px; cursor: pointer; width: 100%; margin-top: 1rem; font-size: 1rem;}
         
-        .tier-row { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem; }
+        .margin-options-section, .tiered-discount-section { margin-bottom: 1.5rem; }
+        .margin-option-row, .tier-row { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem; }
+        .margin-option-row input[type="radio"] { width: auto; flex-shrink: 0; }
+        .margin-option-row .margin-label-input { flex-grow: 1; }
+        .margin-option-row .margin-value-input { width: 80px; }
         .tier-row input { width: 80px; }
-        .remove-tier-btn { background: var(--error-color); color: white; border: none; border-radius: 4px; padding: 0.2rem 0.5rem; font-size: 0.8rem; cursor: pointer; margin-left: auto;}
-        .add-tier-btn { background: none; border: 1px dashed var(--primary-color); color: var(--primary-color); padding: 0.4rem 0.8rem; border-radius: 4px; cursor: pointer; }
+        .remove-margin-btn, .remove-tier-btn { background: var(--error-color); color: white; border: none; border-radius: 4px; padding: 0.2rem 0.5rem; font-size: 0.8rem; cursor: pointer; margin-left: auto;}
+        .add-margin-btn, .add-tier-btn { background: none; border: 1px dashed var(--primary-color); color: var(--primary-color); padding: 0.4rem 0.8rem; border-radius: 4px; cursor: pointer; }
+        #add-margin-btn { margin-top: 0.5rem; }
 
         .import-file-label { cursor: pointer; background-color: #f9fafb; border: 1px solid var(--border-color); padding: 0.55rem 1rem; border-radius: 6px; }
         .import-file-label:hover { background-color: #f3f4f6; }
