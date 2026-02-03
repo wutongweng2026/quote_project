@@ -876,7 +876,6 @@ async function handleAuthAction(e: Event) {
     const identifier = emailInput.value.trim();
     const password = passwordInput.value.trim();
     
-    // Perform validation before setting loading state
     if (state.loginView === 'signIn' && (!identifier || !password)) {
         state.authError = '用户名和密码不能为空。';
         render();
@@ -890,28 +889,41 @@ async function handleAuthAction(e: Event) {
     try {
         if (state.loginView === 'signIn') {
             if (identifier.toLowerCase() === 'admin' && password === 'admin!admin') {
-                const { data, error } = await supabaseClient.auth.signInWithPassword({
+                let { data, error } = await supabaseClient.auth.signInWithPassword({
                     email: 'admin@system.local',
-                    password: 'admin!admin'
+                    password: 'admin!admin',
                 });
 
+                if (error && error.message.toLowerCase().includes('invalid login credentials')) {
+                    const { data: signUpData, error: signUpError } = await supabaseClient.auth.signUp({
+                        email: 'admin@system.local',
+                        password: 'admin!admin',
+                    });
+
+                    if (signUpError) {
+                        throw error;
+                    }
+                    
+                    if (signUpData.user) {
+                        await supabaseClient.from('login_logs').insert({ user_id: signUpData.user.id, email: signUpData.user.email });
+                    }
+                    return; 
+                }
+                
                 if (error) throw error;
                 
                 if (data.user) {
-                    const { error: logError } = await supabaseClient.from('login_logs').insert({ user_id: data.user.id, email: data.user.email });
-                    if (logError) console.error('Failed to log login event:', logError.message);
+                    await supabaseClient.from('login_logs').insert({ user_id: data.user.id, email: data.user.email });
                 }
+
             } else {
                 const { data, error } = await supabaseClient.auth.signInWithPassword({ email: identifier, password });
-                
                 if (error) throw error;
-                
                 if (data.user) {
-                    const { error: logError } = await supabaseClient.from('login_logs').insert({ user_id: data.user.id, email: data.user.email });
-                    if (logError) console.error('Failed to log login event:', logError.message);
+                    await supabaseClient.from('login_logs').insert({ user_id: data.user.id, email: data.user.email });
                 }
             }
-        } else { // signUp
+        } else { 
             const fullNameInput = ($('#full_name') as HTMLInputElement);
             const phoneInput = ($('#phone') as HTMLInputElement);
             const full_name = fullNameInput.value.trim();
