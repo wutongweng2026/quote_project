@@ -219,7 +219,7 @@ function renderErrorScreen(message: string | null) {
     return `
         <div class="app-status-container">
             <h2>加载失败</h2>
-            <pre>${displayMessage}</pre>
+            <div class="error-details">${displayMessage}</div>
         </div>
     `;
 }
@@ -1121,23 +1121,30 @@ function addEventListeners() {
 async function initializeApp() {
     render(); // Show loading screen
     
-    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+    if (!SUPABASE_URL || SUPABASE_URL.trim() === '' || !SUPABASE_ANON_KEY || SUPABASE_ANON_KEY.trim() === '') {
         state.appStatus = 'error';
-        state.errorDetails = `数据库连接配置错误！
 
-请在您的 Vercel 项目设置中添加以下两个环境变量：
+        const urlValue = SUPABASE_URL ? `<code>'${SUPABASE_URL}'</code>` : '<strong>未找到或为空</strong>';
+        const keyValue = SUPABASE_ANON_KEY ? `<code>'${SUPABASE_ANON_KEY.substring(0, 8)}...'</code>` : '<strong>未找到或为空</strong>';
+        const allEnvKeys = import.meta.env ? Object.keys(import.meta.env).filter(k => k.startsWith('VITE_')).join(', ') : '未检测到 VITE_ 变量';
+        const detectedKeysText = allEnvKeys.length > 0 ? `<code>${allEnvKeys}</code>` : '<strong>未检测到 VITE_ 变量</strong>';
 
-1.  **VITE_SUPABASE_URL**
-    值为: https://pqsppjjmlwemkxyehuqz.supabase.co
+        state.errorDetails = `<strong>数据库连接配置错误！</strong><br><br>
+应用未能从部署环境中获取到有效的 Supabase URL 或 Key。<br><br>
 
-2.  **VITE_SUPABASE_ANON_KEY**
-    值为: sb_publishable_h1g0_kOLSqTlFQBXGPjOuQ_aeTtfbZw
+<strong><u>当前检测到的值:</u></strong><br>
+- <code>VITE_SUPABASE_URL</code>: ${urlValue}<br>
+- <code>VITE_SUPABASE_ANON_KEY</code>: ${keyValue}<br><br>
 
----
-**重要提示：**
-- 变量名必须以 "VITE_" 开头。
-- 请确保您使用的是 "Publishable key" (可发布密钥)，而不是危险的 "Secret Key"。
-- 添加/修改变量后，您需要重新部署Vercel项目。
+<strong><u>检测到的VITE环境变量:</u></strong><br>
+- ${detectedKeysText}<br><br>
+<hr style="border: none; border-top: 1px solid #e2e8f0; margin: 1rem 0;">
+<strong><u>请按以下步骤解决:</u></strong><br>
+1.  <strong>确认变量已保存:</strong> 请再次检查 Vercel 项目中的环境变量是否已正确设置并保存。<br>
+    - <code>VITE_SUPABASE_URL</code> 值应为: <code>https://pqsppjjmlwemkxyehuqz.supabase.co</code><br>
+    - <code>VITE_SUPABASE_ANON_KEY</code> 应为您自己的 <code>public anon key</code>。<br><br>
+
+2.  <strong>重新部署:</strong> 在 Vercel 中添加或修改环境变量后，<strong>必须重新触发一次部署</strong> 才能生效。请进入项目的 "Deployments" 页面，选择最新的部署，然后点击 "Redeploy"。
 `;
         render();
         return;

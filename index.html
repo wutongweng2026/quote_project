@@ -55,15 +55,28 @@
             font-weight: 500;
             margin-bottom: 1rem;
         }
-        .app-status-container pre {
+        .app-status-container .error-details {
             background-color: #f1f5f9;
-            padding: 1rem;
+            padding: 1rem 1.5rem;
             border-radius: 8px;
-            color: var(--error-color);
-            white-space: pre-wrap;
+            color: #475569;
+            white-space: normal;
             word-break: break-all;
             text-align: left;
             max-width: 100%;
+            line-height: 1.7;
+            border-left: 5px solid var(--error-color);
+        }
+        .app-status-container .error-details strong {
+            color: #b91c1c;
+            font-weight: 700;
+        }
+        .app-status-container .error-details code {
+            background-color: #e2e8f0;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: monospace;
+            color: #1e2937;
         }
         .quoteHeader {
             background-color: var(--primary-color);
