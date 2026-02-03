@@ -1,3 +1,15 @@
+// FIX: The reference to "vite/client" was removed as it was causing a "Cannot find type definition file" error.
+// The necessary types for import.meta.env are defined manually below as a workaround for what is likely a
+// project configuration issue (e.g., in tsconfig.json).
+// FIX: Wrapped `ImportMeta` in `declare global` to ensure the type augmentation applies globally from within this module (.tsx file).
+declare global {
+  interface ImportMeta {
+    readonly env: {
+      readonly VITE_SUPABASE_URL: string;
+      readonly VITE_SUPABASE_ANON_KEY: string;
+    };
+  }
+}
 
 // --- TYPES ---
 interface PriceDataItem { [model: string]: number; }
@@ -9,7 +21,6 @@ interface PriceData {
     lastUpdated?: string | null;
 }
 interface SelectionItem { model: string; quantity: number; }
-// FIX: Renamed Selection to SelectionState to avoid conflict with the browser's built-in Selection type.
 interface SelectionState { [category: string]: SelectionItem; }
 interface CustomItem { id: number; category: string; model: string; quantity: number; }
 interface CustomModalState {
@@ -36,7 +47,29 @@ interface AppState {
     loginError: string | null;
     showCustomModal: boolean;
     customModal: CustomModalState;
+    appStatus: 'loading' | 'ready' | 'error';
+    errorDetails: string | null;
+    syncStatus: 'idle' | 'saving' | 'saved' | 'error';
 }
+
+// --- SUPABASE CONFIG ---
+// These values are now read from environment variables.
+// Set them in your hosting provider (e.g., Vercel, Netlify).
+// IMPORTANT: Environment variables for Vite MUST start with "VITE_".
+//
+// 1. VITE_SUPABASE_URL: Your project's URL (e.g., https://xxxxxxxx.supabase.co)
+// 2. VITE_SUPABASE_ANON_KEY: Your project's public 'anon' key.
+const SUPABASE_URL = import.meta.env?.VITE_SUPABASE_URL;
+const SUPABASE_ANON_KEY = import.meta.env?.VITE_SUPABASE_ANON_KEY;
+
+
+// Declare the client, but initialize it inside initializeApp to prevent errors.
+let supabaseClient: any;
+
+// FIX: Declare the global 'supabase' object, which is likely loaded via a <script> tag.
+// This removes the need for '@ts-ignore' during client initialization.
+declare var supabase: any;
+
 
 // --- DATA (Embedded) & CONFIG ---
 const PRICE_DATA: PriceData = {
@@ -68,7 +101,7 @@ const getInitialSelection = (): SelectionState => ({
 });
 
 const state: AppState = {
-    priceData: PRICE_DATA,
+    priceData: { prices: {}, tieredDiscounts: [] },
     isLoggedIn: false,
     view: 'quote',
     selection: getInitialSelection(),
@@ -90,12 +123,59 @@ const state: AppState = {
         showCancel: false,
         isDanger: false,
     },
+    appStatus: 'loading',
+    errorDetails: null,
+    syncStatus: 'idle',
 };
+
+function debounce(func: Function, wait: number) {
+  let timeout: number;
+  return function executedFunction(...args: any[]) {
+    const later = () => {
+      clearTimeout(timeout);
+      func(...args);
+    };
+    clearTimeout(timeout);
+    timeout = setTimeout(later, wait);
+  };
+}
+
+const saveDataToSupabase = debounce(async (dataToSave: PriceData) => {
+    if (!supabaseClient) return;
+    
+    state.syncStatus = 'saving';
+    render();
+
+    console.log("Saving data to Supabase...");
+    const { error } = await supabaseClient
+        .from('quote_data')
+        .update({ data: dataToSave, updated_at: new Date().toISOString() })
+        .eq('id', 1);
+
+    if (error) {
+        console.error("Error saving to Supabase:", error);
+        state.syncStatus = 'error';
+    } else {
+        console.log("Data saved successfully.");
+        state.syncStatus = 'saved';
+    }
+    render();
+
+    if (state.syncStatus === 'saved') {
+        setTimeout(() => {
+            if (state.syncStatus === 'saved') {
+                state.syncStatus = 'idle';
+                render();
+            }
+        }, 2500);
+    }
+}, 1500);
 
 function updateTimestamp() {
     if (state.priceData) {
         state.priceData.lastUpdated = new Date().toISOString();
     }
+    saveDataToSupabase(state.priceData);
 }
 
 // --- DOM SELECTORS ---
@@ -104,6 +184,15 @@ const appContainer = $('#app')!;
 
 // --- RENDER FUNCTIONS ---
 function render() {
+    if (state.appStatus === 'loading') {
+        appContainer.innerHTML = renderLoadingScreen();
+        return;
+    }
+    if (state.appStatus === 'error') {
+        appContainer.innerHTML = renderErrorScreen(state.errorDetails);
+        return;
+    }
+
     let html = '';
     if (state.view === 'quote') {
         html = renderQuoteTool();
@@ -119,6 +208,20 @@ function render() {
     }
 
     appContainer.innerHTML = html;
+}
+
+function renderLoadingScreen() {
+    return `<div class="app-status-container"><h2>正在从云端加载数据...</h2></div>`;
+}
+
+function renderErrorScreen(message: string | null) {
+    const displayMessage = message || "发生未知错误。";
+    return `
+        <div class="app-status-container">
+            <h2>加载失败</h2>
+            <pre>${displayMessage}</pre>
+        </div>
+    `;
 }
 
 function renderLoginModal() {
@@ -249,7 +352,7 @@ function renderConfigRow(category: string) {
             <td>
                 <select class="model-select">
                     <option value="">-- 请选择 --</option>
-                    ${Object.keys(models).map(model => `<option value="${model}" ${currentSelection.model === model ? 'selected' : ''}>${model}</option>`).join('')}
+                    ${Object.keys(models).sort().map(model => `<option value="${model}" ${currentSelection.model === model ? 'selected' : ''}>${model}</option>`).join('')}
                 </select>
             </td>
             <td>
@@ -270,7 +373,7 @@ function renderCustomItemRow(item: CustomItem) {
             <td>
                 <select class="custom-model-select">
                     <option value="">-- 请选择 --</option>
-                    ${Object.keys(models).map(model => `<option value="${model}" ${item.model === model ? 'selected' : ''}>${model}</option>`).join('')}
+                    ${Object.keys(models).sort().map(model => `<option value="${model}" ${item.model === model ? 'selected' : ''}>${model}</option>`).join('')}
                 </select>
             </td>
             <td>
@@ -298,6 +401,20 @@ function renderAddCategoryRow() {
     `;
 }
 
+function renderSyncStatus() {
+    switch (state.syncStatus) {
+        case 'saving':
+            return `<span id="sync-status" class="saving"><span class="spinner"></span>正在保存...</span>`;
+        case 'saved':
+            return `<span id="sync-status" class="saved">已同步 ✓</span>`;
+        case 'error':
+            return `<span id="sync-status" class="error">同步失败 ✗</span>`;
+        case 'idle':
+        default:
+             return `<span id="sync-status">所有更改已保存</span>`;
+    }
+}
+
 function renderAdminPanel() {
     const searchTerm = (state.adminSearchTerm || '').toLowerCase();
     const filteredPriceEntries = Object.entries(state.priceData.prices)
@@ -313,7 +430,10 @@ function renderAdminPanel() {
     <div class="adminContainer">
         <header class="adminHeader">
             <h2>龙盛科技 系统管理后台 V1.01</h2>
-            <button id="back-to-quote-btn" class="admin-button">返回报价首页</button>
+            <div class="header-actions-admin">
+                ${renderSyncStatus()}
+                <button id="back-to-quote-btn" class="admin-button">返回报价首页</button>
+            </div>
         </header>
 
         <div class="admin-section">
@@ -325,7 +445,7 @@ function renderAdminPanel() {
                     ${(state.priceData.tieredDiscounts || []).map(tier => `
                         <div class="tier-row" data-tier-id="${tier.id}">
                             <span>满</span> <input type="number" class="tier-threshold" value="${tier.threshold}" placeholder="数量" /> <span>件, 打</span>
-                            <input type="number" class="tier-rate" step="1" value="${Math.round(tier.rate * 100)}" placeholder="例如: 99" /> <span>折</span>
+                            <input type="number" class="tier-rate" step="1" value="${Math.round((tier.rate || 1) * 100)}" placeholder="例如: 99" /> <span>折</span>
                             <button class="remove-tier-btn">删除</button>
                         </div>
                     `).join('')}
@@ -434,7 +554,7 @@ function calculateTotals() {
     const customItems = state.customItems.filter(item => item.model && item.quantity > 0);
     const totalQuantity = [...standardItems, ...customItems].reduce((acc, { quantity }) => acc + quantity, 0);
 
-    const sortedTiers = [...state.priceData.tieredDiscounts].sort((a, b) => b.threshold - a.threshold);
+    const sortedTiers = [...(state.priceData.tieredDiscounts || [])].sort((a, b) => b.threshold - a.threshold);
     let appliedRate = 1.0;
     let appliedDiscountLabel = '无折扣';
 
@@ -528,7 +648,7 @@ function handleMatchConfig() {
             let targetCategory = category;
 
             if (category === '硬盘') {
-                const availableSlot = hddFillOrder.find(cat => newSelection[cat].model === '');
+                const availableSlot = hddFillOrder.find(cat => !newSelection[cat].model);
                 if (availableSlot) {
                     targetCategory = availableSlot;
                 } else {
@@ -536,7 +656,7 @@ function handleMatchConfig() {
                 }
             }
 
-            if (newSelection[targetCategory] && newSelection[targetCategory].model === '') {
+            if (newSelection[targetCategory] && !newSelection[targetCategory].model) {
                 newSelection[targetCategory].model = model;
 
                 const regex = new RegExp(`(${model.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}|${normalizedModel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})[^/|\\\\]*?[*x]\\s*(\\d+)`, 'i');
@@ -579,7 +699,8 @@ function handleExportExcel() {
 
     rows.push([]); 
     rows.push(['', '', '', '总成本', costTotal.toString()]);
-    rows.push(['', '', '', '点位', String(state.markupPoints)]);
+    // FIX: Changed String(state.markupPoints) to state.markupPoints.toString() to fix a type error where 'String' is not considered callable.
+    rows.push(['', '', '', '点位', state.markupPoints.toString()]);
     rows.push(['', '', '', '折扣', totals.appliedRate.toString()]);
     rows.push(['', '', '', '特别立减', state.specialDiscount.toString()]);
     rows.push(['', '', '', '最终报价', totals.finalPrice.toString()]);
@@ -865,11 +986,14 @@ function addEventListeners() {
                 });
             }
         } else if (button && button.id === 'add-tier-btn') {
+            if (!state.priceData.tieredDiscounts) state.priceData.tieredDiscounts = [];
             state.priceData.tieredDiscounts.push({ id: Date.now(), threshold: 0, rate: 0.99 });
+            updateTimestamp();
             render();
         } else if (button && button.classList.contains('remove-tier-btn') && tierRow) {
             const tierId = Number(tierRow.dataset.tierId);
             state.priceData.tieredDiscounts = state.priceData.tieredDiscounts.filter(t => t.id !== tierId);
+            updateTimestamp();
             render();
         } else if (button && button.id === 'import-btn') {
             if (state.pendingFile) {
@@ -949,7 +1073,7 @@ function addEventListeners() {
             if (!tier) return;
             if (target.classList.contains('tier-threshold')) tier.threshold = Number(target.value);
             if (target.classList.contains('tier-rate')) tier.rate = Number(target.value) / 100;
-            updateTimestamp(); // Auto-save on change
+            updateTimestamp();
             return;
         }
 
@@ -994,7 +1118,70 @@ function addEventListeners() {
 }
 
 // --- INITIALIZATION ---
-function initializeApp() {
+async function initializeApp() {
+    render(); // Show loading screen
+    
+    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+        state.appStatus = 'error';
+        state.errorDetails = `数据库连接配置错误！
+
+请在您的 Vercel 项目设置中添加以下两个环境变量：
+
+1.  **VITE_SUPABASE_URL**
+    值为: https://pqsppjjmlwemkxyehuqz.supabase.co
+
+2.  **VITE_SUPABASE_ANON_KEY**
+    值为: sb_publishable_h1g0_kOLSqTlFQBXGPjOuQ_aeTtfbZw
+
+---
+**重要提示：**
+- 变量名必须以 "VITE_" 开头。
+- 请确保您使用的是 "Publishable key" (可发布密钥)，而不是危险的 "Secret Key"。
+- 添加/修改变量后，您需要重新部署Vercel项目。
+`;
+        render();
+        return;
+    }
+
+    // FIX: Removed @ts-ignore by declaring the global 'supabase' variable at the top of the file.
+    supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    try {
+        const { data, error } = await supabaseClient
+            .from('quote_data')
+            .select('data')
+            .eq('id', 1)
+            .single();
+
+        if (error && error.code !== 'PGRST116') { // PGRST116 means no rows found, which is ok on first run
+            throw error;
+        }
+
+        if (data && data.data) {
+            state.priceData = data.data;
+        } else {
+            // No data in DB, so this is the first run. Insert the default data.
+            console.log("No data found in Supabase. Initializing with default data...");
+            state.priceData = PRICE_DATA;
+            const { error: insertError } = await supabaseClient
+                .from('quote_data')
+                .insert({ id: 1, data: PRICE_DATA });
+
+            if (insertError) {
+                throw insertError;
+            }
+        }
+        state.appStatus = 'ready';
+    } catch (e: any) {
+        console.error("Failed to load data from Supabase:", e);
+        state.appStatus = 'error';
+        state.errorDetails = `无法从云端加载数据。请检查：
+1. Vercel 中的环境变量是否已正确设置并重新部署。
+2. Supabase 数据库表是否已按说明创建。
+3. 网络连接是否正常。
+
+错误详情: ${e.message}`;
+    }
     render();
 }
 

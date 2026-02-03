@@ -41,21 +41,29 @@
             box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
             overflow: hidden;
         }
-        .loading-container {
+        .app-status-container {
             display: flex;
             flex-direction: column;
             justify-content: center;
             align-items: center;
-            min-height: 300px;
+            min-height: 400px;
             text-align: center;
             padding: 2rem;
             color: var(--secondary-text-color);
         }
-        .loading-container.error h1 {
-            color: var(--error-color);
-        }
-        .loading-container h2 {
+        .app-status-container h2 {
             font-weight: 500;
+            margin-bottom: 1rem;
+        }
+        .app-status-container pre {
+            background-color: #f1f5f9;
+            padding: 1rem;
+            border-radius: 8px;
+            color: var(--error-color);
+            white-space: pre-wrap;
+            word-break: break-all;
+            text-align: left;
+            max-width: 100%;
         }
         .quoteHeader {
             background-color: var(--primary-color);
@@ -357,6 +365,36 @@
             background-color: #e2e8f0;
         }
 
+        /* --- Sync Status --- */
+        .header-actions-admin {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+        #sync-status {
+            font-size: 0.9rem;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            color: var(--secondary-text-color);
+            display: flex;
+            align-items: center;
+        }
+        #sync-status.saving { color: var(--secondary-color); }
+        #sync-status.saved { color: var(--primary-color-hover); }
+        #sync-status.error { color: var(--error-color); }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .spinner {
+            display: inline-block;
+            width: 1em;
+            height: 1em;
+            border: 2px solid currentColor;
+            border-right-color: transparent;
+            border-radius: 50%;
+            animation: spin .75s linear infinite;
+            vertical-align: middle;
+            margin-right: 0.5em;
+        }
+
         @keyframes fadeIn {
             from { opacity: 0; }
             to { opacity: 1; }
@@ -376,6 +414,7 @@
     <div id="app">
         <!-- App content will be rendered here -->
     </div>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script type="module" src="/index.tsx"></script>
 </body>
 </html>
