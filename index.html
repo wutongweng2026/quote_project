@@ -216,6 +216,9 @@
             text-align: center;
         }
         .config-table td { padding: 0 0.5rem; vertical-align: middle; }
+        .config-table td:nth-child(4) {
+            text-align: center;
+        }
         .config-row-label { font-weight: 500; }
         .config-row-action button {
             background-color: var(--error-color);
@@ -372,14 +375,11 @@
         .quick-add-form button, #import-btn { background-color: var(--secondary-color); border: none; color: white; padding: 0.6rem 1.2rem; border-radius: 6px; cursor: pointer; }
         .admin-save-section-btn { background-color: var(--secondary-color); color: white; border: none; padding: 0.7rem 1.5rem; border-radius: 6px; cursor: pointer; width: 100%; margin-top: 1rem; font-size: 1rem;}
         
-        .margin-options-section, .tiered-discount-section { margin-bottom: 1.5rem; }
-        .margin-option-row, .tier-row { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem; }
-        .margin-option-row input[type="radio"] { width: auto; flex-shrink: 0; }
-        .margin-option-row .margin-label-input { flex-grow: 1; }
-        .margin-option-row .margin-value-input { width: 80px; }
-        .tier-row input { width: 80px; }
-        .remove-margin-btn, .remove-tier-btn { background: var(--error-color); color: white; border: none; border-radius: 4px; padding: 0.2rem 0.5rem; font-size: 0.8rem; cursor: pointer; margin-left: auto;}
-        .add-margin-btn, .add-tier-btn { background: none; border: 1px dashed var(--primary-color); color: var(--primary-color); padding: 0.4rem 0.8rem; border-radius: 4px; cursor: pointer; }
+        .tier-row, .markup-point-row { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem; }
+        .tier-row input, .markup-point-row .markup-value-input { width: 80px; }
+        .markup-point-row .markup-alias-input { flex-grow: 1; }
+        .remove-tier-btn, .remove-markup-point-btn { background: var(--error-color); color: white; border: none; border-radius: 4px; padding: 0.2rem 0.5rem; font-size: 0.8rem; cursor: pointer; margin-left: auto;}
+        .add-margin-btn, .add-tier-btn, #add-markup-point-btn { background: none; border: 1px dashed var(--primary-color); color: var(--primary-color); padding: 0.4rem 0.8rem; border-radius: 4px; cursor: pointer; }
         #add-margin-btn { margin-top: 0.5rem; }
 
         .import-file-label { cursor: pointer; background-color: #f9fafb; border: 1px solid var(--border-color); padding: 0.55rem 1rem; border-radius: 6px; }

@@ -1,12 +1,17 @@
+
+
 // LOGIN FUNCTIONALITY COMPLETELY REMOVED. This app now loads directly into the quote tool.
 
 // --- TYPES ---
 interface PriceDataItem { [model: string]: number; }
 interface Prices { [category: string]: PriceDataItem; }
 interface TieredDiscount { id: number; threshold: number; rate: number; }
+interface MarkupPoint { id: number; alias: string; value: number; }
+
 interface PriceData {
     prices: Prices;
     tieredDiscounts: TieredDiscount[];
+    markupPoints: MarkupPoint[];
     lastUpdated?: string | null;
 }
 interface SelectionItem { model: string; quantity: number; }
@@ -30,7 +35,7 @@ interface AppState {
     customItems: CustomItem[];
     newCategory: string;
     specialDiscount: number;
-    markupPoints: number;
+    markupPoints: number; // This is the ID of the selected markup point
     adminSearchTerm: string;
     showCustomModal: boolean;
     customModal: CustomModalState;
@@ -48,6 +53,11 @@ const PRICE_DATA: PriceData = {
   },
   "tieredDiscounts": [
     { "id": 1721360183321, "threshold": 10, "rate": 0.99 }
+  ],
+  "markupPoints": [
+    { "id": 1, "alias": "标准(12点)", "value": 12 },
+    { "id": 2, "alias": "渠道(10点)", "value": 10 },
+    { "id": 3, "alias": "大客户(8点)", "value": 8 }
   ]
 };
 
@@ -72,7 +82,7 @@ const state: AppState = {
     customItems: [],
     newCategory: '',
     specialDiscount: 0,
-    markupPoints: 12,
+    markupPoints: PRICE_DATA.markupPoints[0]?.id || 0,
     adminSearchTerm: '',
     showCustomModal: false,
     customModal: {
@@ -175,15 +185,18 @@ function renderQuoteTool() {
 
                 <div class="controls-grid">
                     <div class="control-group">
-                        <label>应用折扣:</label>
+                        <label>折扣:</label>
                         <div class="discount-display">${totals.appliedDiscountLabel}</div>
                     </div>
                     <div class="control-group">
-                         <label for="markup-points-input">点位:</label>
-                        <div class="points-input-group">
-                           <input type="number" id="markup-points-input" value="${state.markupPoints}" placeholder="例如: 12" />
-                           <span>点</span>
-                        </div>
+                        <label for="markup-points-select">点位:</label>
+                        <select id="markup-points-select">
+                            ${state.priceData.markupPoints.map(point => `
+                                <option value="${point.id}" ${state.markupPoints === point.id ? 'selected' : ''}>
+                                    ${point.alias.split('(')[0].trim()}
+                                </option>
+                            `).join('')}
+                        </select>
                     </div>
                     <div class="control-group">
                         <label for="special-discount-input">特别立减:</label>
@@ -286,6 +299,25 @@ function renderAdminPanel() {
         </header>
         
         <div class="admin-content">
+            <div class="admin-section">
+                <h3 class="admin-section-header">点位管理</h3>
+                <div class="admin-section-body">
+                    <div id="markup-points-list">
+                        ${state.priceData.markupPoints.map(point => `
+                            <div class="markup-point-row" data-id="${point.id}">
+                                <input type="text" class="markup-alias-input" value="${point.alias}" placeholder="别名 (例如: 标准点位)">
+                                <input type="number" class="markup-value-input" value="${point.value}" placeholder="点数">
+                                <span>点</span>
+                                <button class="remove-markup-point-btn" data-id="${point.id}">删除</button>
+                            </div>
+                        `).join('')}
+                    </div>
+                     <div class="markup-point-row" style="margin-top: 1rem;">
+                        <button id="add-markup-point-btn">添加新点位</button>
+                    </div>
+                </div>
+            </div>
+
             <div class="admin-section">
                 <h3 class="admin-section-header">折扣阶梯管理</h3>
                 <div class="admin-section-body">
@@ -402,7 +434,10 @@ function calculateTotals() {
         appliedDiscountLabel = `满 ${applicableTier.threshold} 件, 打 ${applicableTier.rate} 折`;
     }
 
-    const priceBeforeDiscount = costTotal * (1 + state.markupPoints / 100);
+    const selectedMarkupPoint = state.priceData.markupPoints.find(p => p.id === state.markupPoints);
+    const markupValue = selectedMarkupPoint ? selectedMarkupPoint.value : 0;
+
+    const priceBeforeDiscount = costTotal * (1 + markupValue / 100);
     let finalPrice = priceBeforeDiscount * appliedRate - state.specialDiscount;
     
     finalPrice = Math.max(0, finalPrice);
@@ -578,7 +613,8 @@ function addEventListeners() {
         }
         
         if(button && button.id === 'custom-modal-cancel-btn') {
-            state.showCustomModal = false; render();
+            state.showCustomModal = false;
+            render();
         } else if (button && button.id === 'custom-modal-confirm-btn') {
             if (state.customModal.title === '管理员登录') {
                 const passwordInput = $('#modal-input') as HTMLInputElement;
@@ -614,11 +650,13 @@ function addEventListeners() {
             state.customItems = [];
             state.newCategory = '';
             state.specialDiscount = 0;
-            state.markupPoints = 12;
+            state.markupPoints = state.priceData.markupPoints[0]?.id || 0;
             render();
         } else if (button && button.classList.contains('remove-item-btn') && row) {
             const category = row.dataset.category;
-            if(category) state.selection[category] = getInitialSelection()[category];
+            if(category) {
+                state.selection[category] = getInitialSelection()[category];
+            }
             render();
         } else if (button && button.id === 'add-category-btn') {
             if (state.newCategory.trim()) {
@@ -626,7 +664,8 @@ function addEventListeners() {
                  if (!state.customItems.some(item => item.category === newCat)) {
                     state.customItems.push({ id: Date.now(), category: newCat, model: '', quantity: 1 });
                 }
-                state.newCategory = ''; render();
+                state.newCategory = '';
+                render();
             }
         } else if (button && button.classList.contains('remove-custom-item-btn') && row) {
             state.customItems = state.customItems.filter(item => item.id !== Number(row.dataset.customId));
@@ -710,7 +749,21 @@ function addEventListeners() {
             const tierId = Number(button.dataset.id);
             state.priceData.tieredDiscounts = state.priceData.tieredDiscounts.filter(t => t.id !== tierId);
             render();
+        } else if (button && button.id === 'add-markup-point-btn') {
+            const newPoint = { id: Date.now(), alias: '', value: 0 };
+            state.priceData.markupPoints.push(newPoint);
+            render();
+        } else if (button && button.classList.contains('remove-markup-point-btn')) {
+            const pointId = Number(button.dataset.id);
+            state.priceData.markupPoints = state.priceData.markupPoints.filter(p => p.id !== pointId);
+            if (state.markupPoints === pointId && state.priceData.markupPoints.length > 0) {
+                state.markupPoints = state.priceData.markupPoints[0].id;
+            } else if (state.priceData.markupPoints.length === 0) {
+                state.markupPoints = 0;
+            }
+            render();
         }
+
 
     });
 
@@ -729,6 +782,20 @@ function addEventListeners() {
                     tier.threshold = parseInt(target.value, 10) || 0;
                 } else if (target.classList.contains('tier-rate-input')) {
                     tier.rate = parseFloat(target.value) || 0;
+                }
+            }
+            return;
+        }
+        
+        const markupRow = target.closest<HTMLDivElement>('.markup-point-row');
+        if (markupRow && markupRow.dataset.id) {
+            const pointId = Number(markupRow.dataset.id);
+            const point = state.priceData.markupPoints.find(p => p.id === pointId);
+            if (point) {
+                if (target.classList.contains('markup-alias-input')) {
+                    point.alias = target.value;
+                } else if (target.classList.contains('markup-value-input')) {
+                    point.value = parseInt(target.value, 10) || 0;
                 }
             }
             return;
@@ -759,17 +826,19 @@ function addEventListeners() {
         if (row && row.dataset.category && !row.dataset.model) {
             const category = row.dataset.category;
             if (target.classList.contains('quantity-input')) {
-                state.selection[category].quantity = Math.max(0, parseInt(target.value, 10) || 0); render();
+// FIX: Separated state update and render call to new lines to fix "expression is not callable" error and improve readability.
+                state.selection[category].quantity = Math.max(0, parseInt(target.value, 10) || 0);
+                render();
             }
         } else if (row && row.dataset.customId) {
             const item = state.customItems.find(i => i.id === Number(row.dataset.customId));
             if (item && target.classList.contains('custom-quantity-input')) {
-                item.quantity = Math.max(0, parseInt(target.value, 10) || 0); render();
+                item.quantity = Math.max(0, parseInt(target.value, 10) || 0);
+                render();
             }
         } else if (target.id === 'special-discount-input') {
-            state.specialDiscount = Math.max(0, Number(target.value)); render();
-        } else if (target.id === 'markup-points-input') {
-            state.markupPoints = Math.max(0, Number(target.value)); render();
+            state.specialDiscount = Math.max(0, Number(target.value));
+            render();
         }
     });
     
@@ -777,12 +846,21 @@ function addEventListeners() {
         const target = e.target as HTMLInputElement | HTMLSelectElement;
         const row = target.closest<HTMLTableRowElement>('tr');
         
-        if (row && row.dataset.category) {
+        if (target.id === 'markup-points-select') {
+            state.markupPoints = Number((target as HTMLSelectElement).value);
+            render();
+        } else if (row && row.dataset.category) {
             const category = row.dataset.category;
-            if (target.classList.contains('model-select')) { state.selection[category].model = (target as HTMLSelectElement).value; render(); }
+            if (target.classList.contains('model-select')) {
+                state.selection[category].model = (target as HTMLSelectElement).value;
+                render();
+            }
         } else if (row && row.dataset.customId) {
             const item = state.customItems.find(i => i.id === Number(row.dataset.customId));
-            if (item && target.classList.contains('custom-model-select')) { item.model = (target as HTMLSelectElement).value; render(); }
+            if (item && target.classList.contains('custom-model-select')) {
+                item.model = (target as HTMLSelectElement).value;
+                render();
+            }
         }
     });
 }
