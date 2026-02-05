@@ -727,28 +727,39 @@ function addEventListeners() {
                 e.preventDefault();
                 state.view = 'register';
                 render();
+                return;
             } else if (link.id === 'go-to-login') {
                 e.preventDefault();
                 state.view = 'login';
                 render();
+                return;
             }
         }
 
         const button = target.closest('button');
         if (!button) return;
+        
+        let needsRender = false;
 
-        if (button.id === 'logout-btn') await supabase.auth.signOut();
-        else if (button.id === 'user-management-btn') {
+        if (button.id === 'logout-btn') {
+            await supabase.auth.signOut();
+            // onAuthStateChange will handle render
+        } else if (button.id === 'user-management-btn') {
             state.view = 'userManagement';
-            render();
-        } else if (button.id === 'app-view-toggle-btn') state.view = 'admin';
-        else if (button.id === 'back-to-quote-btn') state.view = 'quote';
-        else if (button.id === 'reset-btn') {
+            needsRender = true;
+        } else if (button.id === 'app-view-toggle-btn') {
+            state.view = 'admin';
+            needsRender = true;
+        } else if (button.id === 'back-to-quote-btn') {
+            state.view = 'quote';
+            needsRender = true;
+        } else if (button.id === 'reset-btn') {
             state.selection = getInitialSelection();
             state.customItems = [];
             state.newCategory = '';
             state.specialDiscount = 0;
             state.markupPoints = state.priceData.markupPoints[0]?.id || 0;
+            needsRender = true;
         } else if (button.classList.contains('approve-user-btn')) {
             const userId = button.closest('tr')?.dataset.userId;
             if (!userId) return;
@@ -758,6 +769,7 @@ function addEventListeners() {
             } else {
                 const profile = state.profiles.find(p => p.id === userId);
                 if (profile) profile.is_approved = true;
+                needsRender = true;
             }
         } else if (button.classList.contains('delete-user-btn')) {
             const row = button.closest('tr');
@@ -777,7 +789,7 @@ function addEventListeners() {
                         showModal({ title: '删除失败', message: error.message });
                     } else {
                         state.profiles = state.profiles.filter(p => p.id !== userId);
-                        render();
+                        render(); // render inside callback
                     }
                 }
             });
@@ -792,8 +804,8 @@ function addEventListeners() {
                      if(error) { showModal({ title: '删除失败', message: error.message }); } 
                      else {
                         if (state.priceData.prices[category]) delete state.priceData.prices[category][model];
+                        render(); // render inside callback
                      }
-                     render();
                 }
             });
         }
@@ -813,10 +825,15 @@ function addEventListeners() {
                     state.priceData.prices[category][model] = newPrice;
                 }
             });
-        } else if (button.id === 'generate-quote-btn') handleExportExcel();
-        else if (button.id === 'match-config-btn') handleMatchConfig();
+        } else if (button.id === 'generate-quote-btn') {
+            handleExportExcel();
+        } else if (button.id === 'match-config-btn') {
+            handleMatchConfig(); // This calls render internally
+        }
         
-        render();
+        if (needsRender) {
+            render();
+        }
     });
 
     appContainer.addEventListener('input', (e) => {
@@ -837,10 +854,14 @@ function addEventListeners() {
     appContainer.addEventListener('change', async (e) => {
         const target = e.target as HTMLSelectElement;
         const row = target.closest('tr');
+        let needsRender = false;
+
         if (target.id === 'markup-points-select') {
             state.markupPoints = Number(target.value);
+            needsRender = true;
         } else if (row?.dataset.category && target.classList.contains('model-select')) {
             state.selection[row.dataset.category].model = target.value;
+            needsRender = true;
         } else if (target.classList.contains('user-role-select')) {
             const userId = target.closest('tr')?.dataset.userId;
             if (!userId) return;
@@ -853,9 +874,13 @@ function addEventListeners() {
             } else {
                 const profile = state.profiles.find(p => p.id === userId);
                 if (profile) profile.role = newRole;
+                needsRender = true; // Re-render to reflect potential UI changes if any
             }
         }
-        render();
+        
+        if (needsRender) {
+            render();
+        }
     });
 }
 
@@ -930,8 +955,8 @@ supabase.auth.onAuthStateChange(async (event, session) => {
                 state.errorMessage = `无法获取您的用户资料，可能是数据库权限问题: ${error.message}`;
             }
         } else if (profile) {
-            // CRITICAL: Check if user is approved
-            if (!profile.is_approved) {
+            // CRITICAL: Check if user is approved, but always allow admins through.
+            if (!profile.is_approved && profile.role !== 'admin') {
                 // If not approved, show modal and sign out immediately.
                 showModal({
                     title: '账户待审批',
