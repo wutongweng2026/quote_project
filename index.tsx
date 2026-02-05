@@ -90,7 +90,7 @@ async function loadAllData(): Promise<boolean> {
             }
         }
 
-        // 3. Fallback: Fetch all data in parallel
+        // 3. Fallback: Fetch all data from database
         console.log('🌐 Fetching fresh data from database...');
         const [
             { data: itemsData, error: itemsError },
@@ -106,14 +106,12 @@ async function loadAllData(): Promise<boolean> {
         if (discountsError) throw discountsError;
         if (markupsError) throw markupsError;
 
-        // Build derived data
         const pricesMap = (itemsData || []).reduce((acc, item) => {
             if (!acc[item.category]) acc[item.category] = {};
             acc[item.category][item.model] = item.price;
             return acc;
         }, {} as Prices);
 
-        // Update state
         state.priceData.items = (itemsData as DbQuoteItem[]) || [];
         state.priceData.prices = pricesMap;
         state.priceData.tieredDiscounts = discountsData || [];
@@ -134,7 +132,7 @@ async function loadAllData(): Promise<boolean> {
                 timestamp: remoteTimestamp
             }));
         } catch (e) {
-            console.warn('Could not save data to local storage (is it full?)');
+            console.warn('Could not save data to local storage');
         }
 
         state.appStatus = 'ready';
@@ -150,8 +148,8 @@ async function loadAllData(): Promise<boolean> {
 }
 
 supabase.auth.onAuthStateChange(async (event, session) => {
+    console.log("Auth Event:", event);
     if (session?.user) {
-        // Only attempt to load profile if we have a session
         const { data: profile, error } = await supabase
             .from('profiles')
             .select('id, full_name, role, is_approved')
@@ -161,7 +159,8 @@ supabase.auth.onAuthStateChange(async (event, session) => {
         if (error) {
             console.error("Profile load error:", error);
             state.currentUser = null;
-            state.appStatus = 'error';
+            state.appStatus = 'ready'; // Still ready to let them try login again
+            state.view = 'login';
             renderApp();
             return;
         }
@@ -181,8 +180,6 @@ supabase.auth.onAuthStateChange(async (event, session) => {
             }
             
             state.showCustomModal = false;
-
-            // SUCCESSFUL LOGIN: Start loading data (using cache where possible)
             const loadedSuccessfully = await loadAllData(); 
 
             if (loadedSuccessfully) {
@@ -208,18 +205,23 @@ supabase.auth.onAuthStateChange(async (event, session) => {
             }
         }
     } else {
-        // NO SESSION: Immediately show login view, DO NOT load data.
         state.appStatus = 'ready';
         state.currentUser = null;
         state.profiles = [];
         state.view = 'login';
-        renderApp();
     }
+    renderApp();
 });
 
 
 (async () => {
+    // 1. 初始化事件监听
     addEventListeners();
-    // 检查 session，auth.onAuthStateChange 会接管后续逻辑
+    
+    // 2. 立即进行首次渲染（状态默认是 ready 和 login）
+    // 这将把 HTML 中的占位符替换为由 JavaScript 控制的交互式表单
+    renderApp();
+    
+    // 3. 异步获取会话状态，这会触发 onAuthStateChange
     supabase.auth.getSession();
 })();

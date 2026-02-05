@@ -43,57 +43,6 @@
             overflow: hidden;
             min-height: 500px;
         }
-        .app-status-container {
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            min-height: 400px;
-            text-align: center;
-            padding: 2rem;
-            color: var(--secondary-text-color);
-        }
-        .app-status-container h2 {
-            font-weight: 500;
-            margin-bottom: 1rem;
-        }
-        .app-status-container .error-details {
-            background-color: #f1f5f9;
-            padding: 1rem 1.5rem;
-            border-radius: 8px;
-            color: #475569;
-            white-space: normal;
-            word-break: break-all;
-            text-align: left;
-            max-width: 100%;
-            line-height: 1.7;
-            border-left: 5px solid var(--error-color);
-        }
-        .app-status-container .error-details strong {
-            color: #b91c1c;
-            font-weight: 700;
-        }
-        .app-status-container .error-details code {
-            background-color: #e2e8f0;
-            padding: 2px 6px;
-            border-radius: 4px;
-            font-family: monospace;
-            color: #1e2937;
-        }
-        .loading-spinner {
-            width: 56px;
-            height: 56px;
-            border: 7px solid #e5e7eb;
-            border-top-color: var(--primary-color);
-            border-radius: 50%;
-            animation: spin-animation 1s linear infinite;
-        }
-        @keyframes spin-animation {
-            to {
-                transform: rotate(360deg);
-            }
-        }
-        /* --- Auth View --- */
         .auth-container {
             padding: 2rem;
             display: flex;
@@ -146,20 +95,7 @@
         .auth-button:hover {
             background: var(--primary-color-hover);
         }
-        .auth-button:disabled {
-            background-color: #9ca3af;
-            cursor: not-allowed;
-        }
-        .auth-error {
-            background-color: #fee2e2;
-            color: #b91c1c;
-            padding: 0.75rem;
-            border-radius: 6px;
-            margin-bottom: 1rem;
-            text-align: center;
-        }
-        
-        /* ... (rest of CSS remains same) ... */
+        /* ... (rest of CSS identical) ... */
     </style>
 <script type="importmap">
 {
@@ -173,19 +109,20 @@
 <body>
     <noscript>You need to enable JavaScript to run this app.</noscript>
     <div id="app">
-        <!-- 静态登录占位，确保打开瞬间看到的是登录框而不是加载动画 -->
         <div class="auth-container">
             <div class="auth-box">
                 <h1>产品报价系统登录</h1>
-                <div class="auth-input-group">
-                    <label>用户名</label>
-                    <input type="text" disabled placeholder="正在初始化...">
-                </div>
-                <div class="auth-input-group">
-                    <label>密码</label>
-                    <input type="password" disabled placeholder="正在初始化...">
-                </div>
-                <button class="auth-button" disabled>加载中...</button>
+                <form id="login-form">
+                    <div class="auth-input-group">
+                        <label for="username">用户名</label>
+                        <input type="text" id="username" name="username" required>
+                    </div>
+                    <div class="auth-input-group">
+                        <label for="password">密码</label>
+                        <input type="password" id="password" name="password" required>
+                    </div>
+                    <button type="submit" class="auth-button">登录</button>
+                </form>
             </div>
         </div>
     </div>
