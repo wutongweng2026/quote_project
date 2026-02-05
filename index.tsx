@@ -799,13 +799,19 @@ function addEventListeners() {
         }
         else if (button.classList.contains('admin-save-item-btn')) {
             const row = button.closest('tr');
-            if(!row) return;
+            if (!row) return;
             const { category, model } = row.dataset;
+            if (!category || !model) {
+                showModal({ title: '保存错误', message: '无法保存项目：缺少类别或型号信息。' });
+                return;
+            }
             const newPrice = parseFloat((row.querySelector('.price-input') as HTMLInputElement).value);
             await withButtonLoading(button, async () => {
                 const { error } = await supabase.from('quote_items').update({ price: newPrice }).match({ category, model });
                 if (error) throw error;
-                if(state.priceData.prices[category]) state.priceData.prices[category][model] = newPrice;
+                if (state.priceData.prices[category]) {
+                    state.priceData.prices[category][model] = newPrice;
+                }
             });
         } else if (button.id === 'generate-quote-btn') handleExportExcel();
         else if (button.id === 'match-config-btn') handleMatchConfig();
