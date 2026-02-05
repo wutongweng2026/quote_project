@@ -359,8 +359,7 @@
         .adminForm label { font-weight: 500; white-space: nowrap; }
         .admin-margin-input, .admin-margin-select { max-width: 150px; }
         .quick-add-form { display: grid; grid-template-columns: 1fr 2fr 1fr auto; gap: 0.75rem; align-items: center; }
-        .import-form { display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap; }
-        .quick-add-form > *, .import-form > * { flex-shrink: 0; }
+        .quick-add-form > * { flex-shrink: 0; }
         .quick-add-form select { flex-grow: 1; min-width: 120px; }
         .quick-add-form input { flex-grow: 2; min-width: 150px; }
         #admin-search-input { margin-bottom: 1rem; }
@@ -380,13 +379,40 @@
         .tier-row input, .markup-point-row .markup-value-input { width: 80px; }
         .markup-point-row .markup-alias-input { flex-grow: 1; }
         .remove-tier-btn, .remove-markup-point-btn { background: var(--error-color); color: white; border: none; border-radius: 4px; padding: 0.2rem 0.5rem; font-size: 0.8rem; cursor: pointer; margin-left: auto;}
-        .add-margin-btn, .add-tier-btn, #add-markup-point-btn { background: none; border: 1px dashed var(--primary-color); color: var(--primary-color); padding: 0.4rem 0.8rem; border-radius: 4px; cursor: pointer; }
-        #add-margin-btn { margin-top: 0.5rem; }
-
-        .import-file-label { cursor: pointer; background-color: #f9fafb; border: 1px solid var(--border-color); padding: 0.55rem 1rem; border-radius: 6px; }
-        .import-file-label:hover { background-color: #f3f4f6; }
-        #import-file-input { display: none; }
-        #file-name-display { color: var(--secondary-text-color); font-size: 0.9rem; }
+        .add-new-btn { 
+            background: none; 
+            border: 1px dashed var(--primary-color); 
+            color: var(--primary-color); 
+            padding: 0.4rem 0.8rem; 
+            border-radius: 4px; 
+            cursor: pointer; 
+            width: 100%;
+            transition: all 0.2s;
+        }
+        .add-new-btn:hover {
+            background-color: #f0fdf4;
+            border-color: var(--primary-color-hover);
+        }
+        
+        .import-section {
+            margin-top: 1rem;
+            padding-top: 1rem;
+            border-top: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+        #import-excel-btn {
+            background-color: var(--secondary-color);
+            color: white;
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            border: none;
+            cursor: pointer;
+        }
+        #file-name-display {
+            color: var(--secondary-text-color);
+        }
 
         /* --- Modals --- */
         .modal-overlay {
@@ -502,6 +528,36 @@
         .auth-button .spinner {
             margin-right: 0;
         }
+        .status-badge {
+            padding: 0.2em 0.6em;
+            border-radius: 1em;
+            font-size: 0.8rem;
+            font-weight: 500;
+        }
+        .status-badge.approved {
+            background-color: #dcfce7;
+            color: #166534;
+        }
+        .status-badge.pending {
+            background-color: #fef9c3;
+            color: #854d0e;
+        }
+        .user-actions {
+            text-align: right;
+            white-space: nowrap;
+        }
+        .user-actions button {
+            font-size: 0.8rem;
+            padding: 0.3rem 0.6rem;
+            border: none;
+            color: white;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+        .user-actions button:hover { opacity: 0.8; }
+        .approve-user-btn { background-color: var(--primary-color); }
+        .delete-user-btn { background-color: var(--error-color); margin-left: 0.5rem; }
 
         @keyframes fadeIn {
             from { opacity: 0; }

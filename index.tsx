@@ -1,4 +1,3 @@
-
 // --- SUPABASE CLIENT ---
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config';
 const supabaseUrl = SUPABASE_URL;
@@ -59,6 +58,7 @@ interface AppState {
     adminSearchTerm: string;
     showCustomModal: boolean;
     customModal: CustomModalState;
+    syncStatus: 'idle' | 'saving' | 'saved' | 'error';
 }
 
 // --- CONFIG ---
@@ -110,6 +110,7 @@ const state: AppState = {
         title: '', message: '', onConfirm: null, confirmText: '确定',
         cancelText: '取消', showCancel: false, isDanger: false,
     },
+    syncStatus: 'idle',
 };
 
 // --- DOM SELECTORS ---
@@ -335,12 +336,22 @@ function renderAdminPanel() {
             const filteredModels = Object.entries(models).filter(([model]) => category.toLowerCase().includes(searchTerm) || model.toLowerCase().includes(searchTerm));
             return [category, Object.fromEntries(filteredModels)];
         }).filter(([, models]) => Object.keys(models).length > 0);
+    
+    const syncStatusMessages = {
+        idle: '',
+        saving: '正在保存...',
+        saved: '已同步 ✓',
+        error: '保存出错!'
+    };
 
     return `
     <div class="adminContainer">
         <header class="adminHeader">
             <h2>系统管理后台</h2>
-            <div class="header-actions-admin"> <button id="back-to-quote-btn" class="admin-button">返回报价首页</button> </div>
+            <div class="header-actions-admin">
+                <div id="sync-status" class="${state.syncStatus}">${syncStatusMessages[state.syncStatus]}</div>
+                <button id="back-to-quote-btn" class="admin-button">返回报价首页</button>
+            </div>
         </header>
         <div class="admin-content">
             <div class="admin-section">
@@ -348,7 +359,7 @@ function renderAdminPanel() {
                 <div class="admin-section-body">
                      <p style="color: var(--secondary-text-color); font-size: 0.9rem; margin-top: 0;">修改后将自动保存。</p>
                     <div id="markup-points-list">
-                        ${state.priceData.markupPoints.map(point => `
+                        ${state.priceData.markupPoints.sort((a, b) => a.value - b.value).map(point => `
                             <div class="markup-point-row" data-id="${point.id}">
                                 <input type="text" class="markup-alias-input" value="${point.alias}" placeholder="别名">
                                 <input type="number" class="markup-value-input" value="${point.value}" placeholder="点数">
@@ -357,7 +368,7 @@ function renderAdminPanel() {
                             </div>
                         `).join('')}
                     </div>
-                     <div class="markup-point-row" style="margin-top: 1rem;"> <button id="add-markup-point-btn">添加新点位</button> </div>
+                     <div class="markup-point-row" style="margin-top: 1rem;"> <button id="add-markup-point-btn" class="add-new-btn">添加新点位</button> </div>
                 </div>
             </div>
             <div class="admin-section">
@@ -365,15 +376,15 @@ function renderAdminPanel() {
                 <div class="admin-section-body">
                     <p style="color: var(--secondary-text-color); font-size: 0.9rem; margin-top: 0;">修改后将自动保存。</p>
                     <div id="tiered-discount-list">
-                        ${state.priceData.tieredDiscounts.map(tier => `
+                        ${state.priceData.tieredDiscounts.sort((a,b) => a.threshold - b.threshold).map(tier => `
                             <div class="tier-row" data-id="${tier.id}">
                                 <span>满</span> <input type="number" class="tier-threshold-input" value="${tier.threshold}" placeholder="数量">
-                                <span>件, 打</span> <input type="number" step="0.01" class="tier-rate-input" value="${tier.rate}" placeholder="折扣率">
+                                <span>件, 打</span> <input type="number" step="0.1" class="tier-rate-input" value="${tier.rate}" placeholder="折扣率">
                                 <span>折</span> <button class="remove-tier-btn" data-id="${tier.id}">删除</button>
                             </div>
                         `).join('')}
                     </div>
-                     <div class="tier-row" style="margin-top: 1rem;"> <button id="add-tier-btn" class="add-tier-btn">添加新折扣阶梯</button> </div>
+                     <div class="tier-row" style="margin-top: 1rem;"> <button id="add-tier-btn" class="add-new-btn">添加新折扣阶梯</button> </div>
                 </div>
             </div>
             <div class="admin-section">
@@ -385,6 +396,11 @@ function renderAdminPanel() {
                          <input type="number" id="quick-add-price" placeholder="成本单价" />
                          <button type="submit" id="quick-add-btn">确认添加/更新</button>
                     </form>
+                    <div class="import-section">
+                        <input type="file" id="import-file-input" accept=".xlsx, .xls" style="display: none;" />
+                        <button id="import-excel-btn">从Excel导入</button>
+                        <span id="file-name-display"></span>
+                    </div>
                 </div>
             </div>
             <div class="admin-section">
@@ -517,7 +533,7 @@ function calculateTotals() {
     let appliedDiscountLabel = '无折扣';
     const applicableTier = sortedTiers.find(tier => tier.threshold > 0 && totalQuantity >= tier.threshold);
     if (applicableTier) {
-        appliedRate = applicableTier.rate;
+        appliedRate = applicableTier.rate / 10;
         appliedDiscountLabel = `满 ${applicableTier.threshold} 件, 打 ${applicableTier.rate} 折`;
     }
 
@@ -637,6 +653,29 @@ async function withButtonLoading(button: HTMLButtonElement, action: () => Promis
     }
 }
 
+function debounce<F extends (...args: any[]) => any>(func: F, waitFor: number) {
+    let timeout: number;
+    return (...args: Parameters<F>): void => {
+        clearTimeout(timeout);
+        timeout = window.setTimeout(() => func(...args), waitFor);
+    };
+}
+
+async function setSyncStatus(status: AppState['syncStatus'], duration = 1500) {
+    state.syncStatus = status;
+    const statusEl = $('#sync-status');
+    if (statusEl) {
+        const syncStatusMessages = { idle: '', saving: '正在保存...', saved: '已同步 ✓', error: '保存出错!' };
+        statusEl.className = status;
+        statusEl.textContent = syncStatusMessages[status];
+    }
+    if (status === 'saved' || status === 'error') {
+        setTimeout(() => {
+            if (state.syncStatus === status) setSyncStatus('idle');
+        }, duration);
+    }
+}
+
 
 function addEventListeners() {
     appContainer.addEventListener('submit', async (e) => {
@@ -725,7 +764,10 @@ function addEventListeners() {
                  const { error } = await supabase.from('quote_items').upsert(
                     { category, model, price }, { onConflict: 'category,model' }
                  );
-                 if (error) throw error;
+                 if (error) {
+                    showModal({ title: '添加失败', message: `无法添加配件，请检查数据库权限设置(RLS)。\n错误: ${error.message}` });
+                    throw error;
+                 }
                  if (!state.priceData.prices[category]) state.priceData.prices[category] = {};
                  state.priceData.prices[category][model] = price;
                  renderApp();
@@ -758,7 +800,55 @@ function addEventListeners() {
         let needsRender = false;
 
         if (button.id === 'logout-btn') {
-            await supabase.auth.signOut();
+            const { error } = await supabase.auth.signOut();
+            if (error) {
+                console.error("Logout failed:", error);
+                showModal({ title: '退出失败', message: `无法退出系统: ${error.message}` });
+            }
+        } else if (button.id === 'import-excel-btn') {
+            ($('#import-file-input') as HTMLInputElement)?.click();
+        } else if (button.id === 'add-markup-point-btn') {
+            const { data, error } = await supabase.from('quote_markups').insert({ alias: '新点位', value: 0 }).select().single();
+            if (error) {
+                showModal({ title: '错误', message: `无法添加点位: ${error.message}` });
+            } else {
+                state.priceData.markupPoints.push(data);
+                needsRender = true;
+            }
+        } else if (button.id === 'add-tier-btn') {
+            const { data, error } = await supabase.from('quote_discounts').insert({ threshold: 0, rate: 10 }).select().single();
+            if (error) {
+                showModal({ title: '错误', message: `无法添加折扣: ${error.message}` });
+            } else {
+                state.priceData.tieredDiscounts.push(data);
+                needsRender = true;
+            }
+        } else if (button.classList.contains('remove-markup-point-btn')) {
+            const id = button.dataset.id;
+            if (!id) return;
+            showModal({ title: '确认删除', message: `确定要删除此点位吗？`, isDanger: true, showCancel: true, confirmText: '删除',
+                onConfirm: async () => {
+                    const { error } = await supabase.from('quote_markups').delete().eq('id', id);
+                    if (error) { showModal({ title: '删除失败', message: error.message }); }
+                    else {
+                        state.priceData.markupPoints = state.priceData.markupPoints.filter(p => p.id !== parseInt(id));
+                        renderApp();
+                    }
+                }
+            });
+        } else if (button.classList.contains('remove-tier-btn')) {
+            const id = button.dataset.id;
+            if (!id) return;
+            showModal({ title: '确认删除', message: `确定要删除此折扣阶梯吗？`, isDanger: true, showCancel: true, confirmText: '删除',
+                onConfirm: async () => {
+                    const { error } = await supabase.from('quote_discounts').delete().eq('id', id);
+                    if (error) { showModal({ title: '删除失败', message: error.message }); }
+                    else {
+                        state.priceData.tieredDiscounts = state.priceData.tieredDiscounts.filter(t => t.id !== parseInt(id));
+                        renderApp();
+                    }
+                }
+            });
         } else if (button.id === 'user-management-btn') {
             state.view = 'userManagement';
             needsRender = true;
@@ -851,8 +941,42 @@ function addEventListeners() {
         }
     });
 
+    const handleAdminDataUpdate = debounce(async (target: HTMLInputElement) => {
+        const row = target.closest('.tier-row, .markup-point-row');
+        if (!row) return;
+
+        const id = parseInt((row as HTMLElement).dataset.id || '');
+        if (isNaN(id)) return;
+
+        setSyncStatus('saving');
+        let error: PostgrestError | null = null;
+
+        if (row.classList.contains('tier-row')) {
+            const threshold = parseFloat((row.querySelector('.tier-threshold-input') as HTMLInputElement)?.value || '0');
+            const rate = parseFloat((row.querySelector('.tier-rate-input') as HTMLInputElement)?.value || '10');
+            ({ error } = await supabase.from('quote_discounts').update({ threshold, rate }).eq('id', id));
+        } else if (row.classList.contains('markup-point-row')) {
+            const alias = (row.querySelector('.markup-alias-input') as HTMLInputElement)?.value || '';
+            const value = parseFloat((row.querySelector('.markup-value-input') as HTMLInputElement)?.value || '0');
+            ({ error } = await supabase.from('quote_markups').update({ alias, value }).eq('id', id));
+        }
+        
+        if (error) {
+            setSyncStatus('error');
+            console.error(error);
+        } else {
+            setSyncStatus('saved');
+        }
+
+    }, 700);
+
     appContainer.addEventListener('input', (e) => {
         const target = e.target as HTMLInputElement;
+
+        if (target.closest('#tiered-discount-list, #markup-points-list')) {
+            handleAdminDataUpdate(target);
+            return;
+        }
 
         if (target.id === 'admin-search-input') {
             state.adminSearchTerm = target.value;
@@ -886,23 +1010,79 @@ function addEventListeners() {
     });
 
     appContainer.addEventListener('change', async (e) => {
-        const target = e.target as HTMLSelectElement;
-        const row = target.closest('tr');
+        const target = e.target as HTMLSelectElement | HTMLInputElement;
 
+        if (target.id === 'import-file-input') {
+            const file = (target as HTMLInputElement).files?.[0];
+            if (!file) return;
+            const fileNameDisplay = $('#file-name-display');
+            if(fileNameDisplay) fileNameDisplay.textContent = file.name;
+            
+            const reader = new FileReader();
+            reader.onload = async (event) => {
+                try {
+                    const data = event.target?.result;
+                    const workbook = XLSX.read(data, { type: 'binary' });
+                    const sheetName = workbook.SheetNames[0];
+                    const worksheet = workbook.Sheets[sheetName];
+                    const json: (string|number)[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+                    
+                    if (json.length < 2) throw new Error('Excel文件为空或缺少标题行。');
+                    
+                    const headers = json[0].map(h => String(h).trim());
+                    const categoryIndex = headers.findIndex(h => ['分类', 'Category'].includes(h));
+                    const modelIndex = headers.findIndex(h => ['型号', 'Model'].includes(h));
+                    const priceIndex = headers.findIndex(h => ['单价', '成本', 'Price', 'Cost'].includes(h));
+
+                    if (categoryIndex === -1 || modelIndex === -1 || priceIndex === -1) {
+                        throw new Error('Excel文件必须包含 "分类", "型号", 和 "单价" 这几列。');
+                    }
+
+                    const itemsToUpsert = json.slice(1).map(row => ({
+                        category: String(row[categoryIndex]).trim(),
+                        model: String(row[modelIndex]).trim(),
+                        price: parseFloat(String(row[priceIndex])),
+                    })).filter(item => item.category && item.model && !isNaN(item.price));
+
+                    if (itemsToUpsert.length === 0) throw new Error('未在文件中找到有效的数据行。');
+                    
+                    const { error } = await supabase.from('quote_items').upsert(itemsToUpsert, { onConflict: 'category,model' });
+                    if (error) throw error;
+                    
+                    itemsToUpsert.forEach(item => {
+                        if (!state.priceData.prices[item.category]) state.priceData.prices[item.category] = {};
+                        state.priceData.prices[item.category][item.model] = item.price;
+                    });
+                    
+                    showModal({ title: '导入成功', message: `成功导入/更新了 ${itemsToUpsert.length} 个配件。`});
+                    renderApp();
+
+                } catch (err: any) {
+                    showModal({ title: '导入失败', message: err.message, isDanger: true });
+                } finally {
+                    (target as HTMLInputElement).value = '';
+                    if(fileNameDisplay) fileNameDisplay.textContent = '';
+                }
+            };
+            reader.readAsBinaryString(file);
+            return;
+        }
+
+        const row = target.closest('tr');
         if (target.id === 'markup-points-select') {
             state.markupPoints = Number(target.value);
             updateTotalsUI();
         } else if (row?.dataset.category && target.classList.contains('model-select')) {
-            state.selection[row.dataset.category].model = target.value;
+            state.selection[row.dataset.category].model = (target as HTMLSelectElement).value;
             updateTotalsUI();
         } else if (target.classList.contains('user-role-select')) {
-            const userId = target.closest('tr')?.dataset.userId;
+            const userId = (target as HTMLSelectElement).closest('tr')?.dataset.userId;
             if (!userId) return;
-            const newRole = target.value as 'admin' | 'sales';
+            const newRole = (target as HTMLSelectElement).value as 'admin' | 'sales';
             const { error } = await supabase.from('profiles').update({ role: newRole }).eq('id', userId);
             if (error) {
                 showModal({ title: '错误', message: `更新角色失败: ${error.message}` });
-                target.value = state.profiles.find(p => p.id === userId)?.role || 'sales';
+                (target as HTMLSelectElement).value = state.profiles.find(p => p.id === userId)?.role || 'sales';
             } else {
                 const profile = state.profiles.find(p => p.id === userId);
                 if (profile) profile.role = newRole;
@@ -984,7 +1164,6 @@ supabase.auth.onAuthStateChange(async (event, session) => {
             state.appStatus = 'loading';
             renderApp();
 
-            // FIX: Use the returned boolean from loadAllData to conditionally proceed.
             const loadedSuccessfully = await loadAllData(); 
 
             if (loadedSuccessfully) {
@@ -1016,3 +1195,11 @@ supabase.auth.onAuthStateChange(async (event, session) => {
 });
 
 addEventListeners();
+// Initial load check, if no user, render login page.
+(async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+        state.appStatus = 'ready';
+        renderApp();
+    }
+})();
