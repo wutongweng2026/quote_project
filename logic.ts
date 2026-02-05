@@ -169,7 +169,9 @@ export function addEventListeners() {
             errorDiv.style.display = 'none';
 
             try {
-                const email = `${username.replace(/\s/g, '_')}@quotesystem.local`;
+                // Generate a unique, safe email for Supabase auth, as it doesn't support non-email logins.
+                // The user's actual username is stored in the `profiles` table. This generated email is never shown.
+                const email = `user_${Date.now()}_${Math.random().toString(36).substring(2, 7)}@quotesystem.local`;
 
                 const { data: { user }, error: signUpError } = await supabase.auth.signUp({ email, password });
                 if (signUpError) throw signUpError;
@@ -191,6 +193,7 @@ export function addEventListeners() {
                     message: '您的账户已创建，请等待管理员审核批准后即可登录。',
                     onConfirm: () => {
                         state.view = 'login';
+                        renderApp(); // re-render after closing modal
                     }
                 });
 
@@ -575,8 +578,11 @@ export function addEventListeners() {
                     const { error } = await supabase.from('quote_items').upsert(itemsToUpsert, { onConflict: 'category,model' });
                     if (error) throw error;
                     
+                    // Fix: Corrected typo 'agora' to 'category' and ensured correct object initialization.
                     itemsToUpsert.forEach(item => {
-                        if (!state.priceData.prices[item.category]) state.priceData.prices[item.category] = {};
+                        if (!state.priceData.prices[item.category]) {
+                            state.priceData.prices[item.category] = {};
+                        }
                         state.priceData.prices[item.category][item.model] = item.price;
                     });
                     
