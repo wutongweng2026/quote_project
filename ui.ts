@@ -364,7 +364,7 @@ function renderUserManagementPanel() {
                         <tbody>
                             ${state.profiles.map(profile => `
                                 <tr data-user-id="${profile.id}">
-                                    <td>${profile.full_name || 'N/A'}</td>
+                                    <td>${profile.full_name || `无名氏 (${profile.id.substring(0, 6)})`}</td>
                                      <td>
                                         <span class="status-badge ${profile.role === 'admin' ? 'approved' : ''}" style="background-color: ${profile.role === 'admin' ? '#bfdbfe' : '#e0e7ff'}; color: ${profile.role === 'admin' ? '#1e40af' : '#3730a3'};">
                                             ${profile.role === 'admin' ? '管理员' : '销售'}
@@ -400,9 +400,18 @@ function renderUserManagementPanel() {
 
 // --- UI HELPERS ---
 export function showModal(options: Partial<CustomModalState>) {
+    // Establish a default action for the confirm button, which is to close the modal.
+    const defaultOnConfirm = () => {
+        state.showCustomModal = false;
+        renderApp();
+    };
+
     state.customModal = {
-        title: '提示', message: '', onConfirm: null, confirmText: '确定',
-        cancelText: '取消', showCancel: false, isDanger: false, errorMessage: '', ...options
+        title: '提示', message: '', 
+        onConfirm: defaultOnConfirm, // Start with the default
+        confirmText: '确定',
+        cancelText: '取消', showCancel: false, isDanger: false, errorMessage: '', 
+        ...options // If `options` contains an `onConfirm`, it will correctly override the default.
     };
     state.showCustomModal = true;
     renderApp();

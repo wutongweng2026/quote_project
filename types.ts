@@ -58,6 +58,7 @@ export interface AppState {
     showCustomModal: boolean;
     customModal: CustomModalState;
     syncStatus: 'idle' | 'saving' | 'saved' | 'error';
+    hasAttemptedDbFix: boolean;
     lastUpdated: string | null;
     loginLogs: DbLoginLog[];
 }

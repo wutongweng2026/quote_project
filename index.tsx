@@ -125,10 +125,17 @@ supabase.auth.onAuthStateChange(async (event, session) => {
                 showModal({
                     title: '账户待审批',
                     message: '您的账户正在等待管理员批准，请稍后再试。',
-                    onConfirm: async () => { await supabase.auth.signOut(); }
+                    onConfirm: async () => {
+                        state.showCustomModal = false;
+                        renderApp();
+                        await supabase.auth.signOut();
+                    }
                 });
                 return;
             }
+            
+            // FIX: Explicitly hide any stale modals if the user is approved or an admin.
+            state.showCustomModal = false;
 
             const loadedSuccessfully = await loadAllData(); 
 

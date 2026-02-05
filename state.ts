@@ -48,5 +48,6 @@ export const state: AppState = {
     },
     syncStatus: 'idle',
     lastUpdated: null,
+    hasAttemptedDbFix: false,
     loginLogs: [],
 };

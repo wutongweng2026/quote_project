@@ -247,10 +247,22 @@ export function addEventListeners() {
             if (!id) return;
             showModal({ title: '确认删除', message: `确定要删除此点位吗？`, isDanger: true, showCancel: true, confirmText: '删除',
                 onConfirm: async () => {
+                    const confirmButton = $('#custom-modal-confirm-btn') as HTMLButtonElement;
+                    if (confirmButton) {
+                        confirmButton.disabled = true;
+                        confirmButton.innerHTML = `<span class="spinner"></span> 正在删除...`;
+                    }
+                    const cancelButton = $('#custom-modal-cancel-btn') as HTMLButtonElement;
+                    if (cancelButton) {
+                        cancelButton.disabled = true;
+                    }
+
                     const { error } = await supabase.from('quote_markups').delete().eq('id', id);
-                    state.showCustomModal = false;
-                    if (error) { showModal({ title: '删除失败', message: error.message }); }
-                    else {
+
+                    if (error) { 
+                        showModal({ title: '删除失败', message: error.message, isDanger: true }); 
+                    } else {
+                        state.showCustomModal = false;
                         state.priceData.markupPoints = state.priceData.markupPoints.filter(p => p.id !== parseInt(id));
                         renderApp();
                     }
@@ -261,10 +273,22 @@ export function addEventListeners() {
             if (!id) return;
             showModal({ title: '确认删除', message: `确定要删除此折扣阶梯吗？`, isDanger: true, showCancel: true, confirmText: '删除',
                 onConfirm: async () => {
+                    const confirmButton = $('#custom-modal-confirm-btn') as HTMLButtonElement;
+                    if (confirmButton) {
+                        confirmButton.disabled = true;
+                        confirmButton.innerHTML = `<span class="spinner"></span> 正在删除...`;
+                    }
+                    const cancelButton = $('#custom-modal-cancel-btn') as HTMLButtonElement;
+                    if (cancelButton) {
+                        cancelButton.disabled = true;
+                    }
+
                     const { error } = await supabase.from('quote_discounts').delete().eq('id', id);
-                    state.showCustomModal = false;
-                    if (error) { showModal({ title: '删除失败', message: error.message }); }
-                    else {
+                    
+                    if (error) { 
+                        showModal({ title: '删除失败', message: error.message, isDanger: true }); 
+                    } else {
+                        state.showCustomModal = false;
                         state.priceData.tieredDiscounts = state.priceData.tieredDiscounts.filter(t => t.id !== parseInt(id));
                         renderApp();
                     }
@@ -295,7 +319,7 @@ export function addEventListeners() {
 
                     if (!newUsername || !newPassword || newPassword.length < 6) {
                         state.customModal.errorMessage = '请输入有效的用户名和至少6位的密码。';
-                        renderApp(); // Re-render modal with error
+                        renderApp();
                         return;
                     }
                     
@@ -304,28 +328,73 @@ export function addEventListeners() {
                     confirmButton.innerHTML = `<span class="spinner"></span> 正在添加`;
                     state.customModal.errorMessage = '';
                     renderApp();
+                    
+                    try {
+                        // 1. Save the admin's current session
+                        const { data: { session: adminSession } } = await supabase.auth.getSession();
+                        if (!adminSession) throw new Error("无法获取管理员会话，请重新登录。");
 
-                    const { data, error } = await supabase
-                        .rpc('create_new_user', {
-                            full_name: newUsername,
+                        // 2. Create a fake email for the new user
+                        const fakeEmail = `user-${Date.now()}@quotesystem.local`;
+
+                        // 3. Use signUp to create the new user. This logs the admin out temporarily.
+                        const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+                            email: fakeEmail,
                             password: newPassword,
-                        })
-                        .single();
+                        });
 
-                    if (error) {
-                        state.customModal.errorMessage = `创建失败: ${error.message}`;
+                        if (signUpError) throw signUpError;
+                        if (!signUpData.user) throw new Error("创建用户成功，但未返回用户信息。");
+
+                        // 4. IMPORTANT: Restore the admin's session immediately
+                        const { error: sessionError } = await supabase.auth.setSession({
+                            access_token: adminSession.access_token,
+                            refresh_token: adminSession.refresh_token,
+                        });
+                        if (sessionError) {
+                            throw new Error(`管理员会话恢复失败: ${sessionError.message}。页面将刷新。`);
+                        }
+
+                        // 5. Manually create the user's profile
+                        const newProfile = {
+                            id: signUpData.user.id,
+                            full_name: newUsername,
+                            role: 'sales' as const,
+                            is_approved: true,
+                        };
+                        const { error: profileError } = await supabase.from('profiles').insert(newProfile);
+
+                        if (profileError) {
+                             throw new Error(`用户登录信息已创建，但配置档案失败: ${profileError.message}`);
+                        }
+
+                        // 6. Success: Update state and show success modal
+                        state.profiles.push(newProfile);
+                        showModal({
+                            title: '添加成功',
+                            message: `用户 "${newUsername}" 已成功添加到系统中。`,
+                            confirmText: '确定',
+                            onConfirm: () => {
+                                state.showCustomModal = false;
+                                renderApp(); // Re-render to show updated list
+                            }
+                        });
+
+
+                    } catch (error: any) {
+                        let friendlyErrorMessage = error.message;
+                        if (error.message && error.message.toLowerCase().includes('rate limit')) {
+                            friendlyErrorMessage = "操作过于频繁，已触发平台的邮件发送限制。请等待一小时后再试。\n\n(提示: 为彻底解决此问题, 请在 Supabase 后台的 Authentication -> Providers -> Email 部分关闭 “Confirm email” 选项。)";
+                        }
+
+                        state.customModal.errorMessage = `创建失败: ${friendlyErrorMessage}`;
                         confirmButton.disabled = false;
                         confirmButton.innerHTML = '确认添加';
                         renderApp();
-                    } else if (data) {
-                        state.profiles.push(data);
-                        state.showCustomModal = false;
-                        renderApp();
-                    } else {
-                        state.customModal.errorMessage = `创建失败: 未收到新用户数据。`;
-                        confirmButton.disabled = false;
-                        confirmButton.innerHTML = '确认添加';
-                        renderApp();
+
+                        if (error.message.includes("页面将刷新")) {
+                            setTimeout(() => window.location.reload(), 3000);
+                        }
                     }
                 }
             });
@@ -396,11 +465,69 @@ export function addEventListeners() {
                 showCancel: true,
                 confirmText: '确认删除',
                 onConfirm: async () => {
+                    const confirmButton = $('#custom-modal-confirm-btn') as HTMLButtonElement;
+                    if (confirmButton) {
+                        confirmButton.disabled = true;
+                        confirmButton.innerHTML = `<span class="spinner"></span> 正在删除...`;
+                    }
+                    const cancelButton = $('#custom-modal-cancel-btn') as HTMLButtonElement;
+                    if (cancelButton) {
+                        cancelButton.disabled = true;
+                    }
+
                     const { error } = await supabase.rpc('delete_user', { user_id: userId });
-                    state.showCustomModal = false;
+                    
                     if (error) {
-                        showModal({ title: '删除失败', message: error.message });
+                        if (error.message.includes('function') && (error.message.includes('does not exist') || error.message.includes('不存在'))) {
+                            if (state.hasAttemptedDbFix) {
+                                showModal({
+                                    title: '删除仍然失败',
+                                    message: '您似乎已经运行了数据库修复脚本，但问题依旧存在。这可能是一个缓存或权限问题。<br><br><strong>请尝试强制刷新页面 (按 Ctrl + F5)</strong>，然后再次尝试删除。如果问题还是无法解决，可能需要检查 Supabase 项目的深层配置。',
+                                    isDanger: true,
+                                    confirmText: '好的'
+                                });
+                            } else {
+                                const sqlFixMessage = `
+                                    <p style="margin-bottom: 1rem;">操作失败，因为您的数据库缺少一个必需的后台函数 (<code>delete_user</code>)。</p>
+                                    <p style="margin-bottom: 0.5rem;">这是一个一次性的配置问题。要解决它，请按以下步骤操作:</p>
+                                    <ol style="text-align: left; margin: 1rem 0; padding-left: 1.5rem; list-style-position: inside;">
+                                      <li style="margin-bottom: 0.5rem;">登录您的 <a href="https://app.supabase.com/" target="_blank" rel="noopener noreferrer">Supabase 项目</a>。</li>
+                                      <li style="margin-bottom: 0.5rem;">在左侧菜单中, 点击 <strong>SQL Editor</strong>。</li>
+                                      <li style="margin-bottom: 0.5rem;">点击 <strong>+ New query</strong> 按钮。</li>
+                                      <li style="margin-bottom: 0.5rem;">将下面的代码完整复制并粘贴到查询窗口中, 然后点击 <strong>RUN</strong>。</li>
+                                    </ol>
+                                    <pre style="background-color: #f1f5f9; border-radius: 4px; padding: 0.8rem; text-align: left; white-space: pre-wrap; word-break: break-all; font-size: 0.8rem; line-height: 1.4;"><code>-- Enables admin users to delete other users
+create or replace function public.delete_user(user_id uuid) 
+returns void 
+language plpgsql 
+security definer 
+as $$
+begin
+  perform auth.admin_delete_user(user_id);
+end;
+$$;
+
+grant execute on function public.delete_user(uuid) to authenticated;
+</code></pre>
+                                    <p style="margin-top: 1rem;">完成后，请关闭此弹窗再重试删除操作。</p>
+                                `;
+                                showModal({ 
+                                    title: '删除失败 (数据库配置缺失)', 
+                                    message: sqlFixMessage, 
+                                    isDanger: true,
+                                    confirmText: '我已了解',
+                                    onConfirm: () => {
+                                        state.hasAttemptedDbFix = true;
+                                        state.showCustomModal = false;
+                                        renderApp();
+                                    }
+                                });
+                            }
+                        } else {
+                            showModal({ title: '删除失败', message: error.message, isDanger: true });
+                        }
                     } else {
+                        state.showCustomModal = false;
                         state.profiles = state.profiles.filter(p => p.id !== userId);
                         renderApp();
                     }
@@ -413,13 +540,25 @@ export function addEventListeners() {
             showModal({
                 title: '确认删除', message: `确定要删除 "${category} - ${model}" 吗？`, showCancel: true, isDanger: true, confirmText: '删除',
                 onConfirm: async () => {
-                     const { error } = await supabase.from('quote_items').delete().match({ category, model });
-                     state.showCustomModal = false;
-                     if(error) { showModal({ title: '删除失败', message: error.message }); } 
-                     else {
+                    const confirmButton = $('#custom-modal-confirm-btn') as HTMLButtonElement;
+                    if (confirmButton) {
+                        confirmButton.disabled = true;
+                        confirmButton.innerHTML = `<span class="spinner"></span> 正在删除...`;
+                    }
+                    const cancelButton = $('#custom-modal-cancel-btn') as HTMLButtonElement;
+                    if (cancelButton) {
+                        cancelButton.disabled = true;
+                    }
+
+                    const { error } = await supabase.from('quote_items').delete().match({ category, model });
+                    
+                    if(error) { 
+                        showModal({ title: '删除失败', message: error.message, isDanger: true }); 
+                    } else {
+                        state.showCustomModal = false;
                         if (state.priceData.prices[category]) delete state.priceData.prices[category][model];
                         renderApp();
-                     }
+                    }
                 }
             });
         }
