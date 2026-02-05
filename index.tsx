@@ -112,9 +112,40 @@ supabase.auth.onAuthStateChange(async (event, session) => {
             .single();
 
         if (error) {
+            console.error("Profile load error:", error);
             state.currentUser = null;
             state.appStatus = 'error';
-            state.errorMessage = `无法获取您的用户资料: ${error.message}. 这可能是数据库权限问题。请确保您为 'profiles' 表启用了RLS，并设置了允许用户读取自己的数据。`;
+            
+            // Special handling for the recursion error
+            if (error.message.includes('infinite recursion')) {
+                state.errorMessage = `
+                    <div style="text-align: left;">
+                        <h3 style="color: #b91c1c; margin-top:0;">数据库策略错误 (无限递归)</h3>
+                        <p>检测到 RLS 策略导致的死循环。这是因为权限检查逻辑在查询自身。</p>
+                        <p>请<strong>立即</strong>在 Supabase SQL Editor 中运行以下修复脚本：</p>
+                        <pre style="background: #f1f5f9; padding: 10px; border-radius: 4px; overflow: auto; font-family: monospace; font-size: 0.8rem; border: 1px solid #e2e8f0;">
+-- 1. 创建安全检查函数 (绕过RLS)
+create or replace function public.is_admin()
+returns boolean language sql security definer set search_path = public
+as $$ select exists (select 1 from profiles where id = auth.uid() and role = 'admin'); $$;
+
+-- 2. 清理旧策略
+drop policy if exists "Admins can insert and update all profiles" on profiles;
+drop policy if exists "Admins can manage all profiles" on profiles;
+drop policy if exists "Users can read own profile" on profiles;
+
+-- 3. 创建新策略
+create policy "Users can read own profile" on profiles 
+for select to authenticated using ( auth.uid() = id );
+
+create policy "Admins can do everything" on profiles 
+for all to authenticated using ( public.is_admin() ) with check ( public.is_admin() );</pre>
+                    </div>
+                `;
+            } else {
+                state.errorMessage = `无法获取您的用户资料: ${error.message}. <br/><br/>这可能是数据库权限问题。请确保您为 'profiles' 表启用了RLS，并设置了允许用户读取自己的数据。`;
+            }
+            
             renderApp();
             return;
         }

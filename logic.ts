@@ -2,7 +2,7 @@ import { state, supabase, getInitialSelection } from './state';
 import { renderApp, showModal, updateTotalsUI, setSyncStatus, renderAdminDataTableBody } from './ui';
 import { getFinalConfigText, calculateTotals } from './calculations';
 import type { PostgrestError } from '@supabase/supabase-js';
-import { createClient } from '@supabase/supabase-js'; // Import factory function
+import { createClient } from '@supabase/supabase-js'; 
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config';
 
 declare var XLSX: any;
@@ -19,7 +19,7 @@ async function updateLastUpdatedTimestamp() {
     if (error) {
         console.error("Failed to update timestamp:", error);
     } else {
-        state.lastUpdated = newTimestamp; // Update local state for immediate UI feedback
+        state.lastUpdated = newTimestamp; 
     }
 }
 
@@ -224,7 +224,6 @@ export function addEventListeners() {
                 showModal({ title: '退出失败', message: `无法退出系统: ${error.message}` });
             }
         } else if (button.id === 'add-new-user-btn') {
-            // --- REFACTORED ADD USER LOGIC (TEMP CLIENT STRATEGY) ---
             showModal({
                 title: '添加新用户',
                 message: `
@@ -257,20 +256,23 @@ export function addEventListeners() {
                     renderApp(); 
                     
                     try {
-                        // Strategy: Create a TEMPORARY, IN-MEMORY Supabase client.
-                        // This allows us to sign up a new user WITHOUT signing out the current admin.
-                        // The 'storage: { ... }' part is critical.
+                        // Strategy: Create a TEMPORARY, IN-MEMORY Supabase client with NO storage persistence.
                         const tempClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
                             auth: {
-                                persistSession: false, // Don't save to localStorage
+                                persistSession: false, 
                                 autoRefreshToken: false,
-                                detectSessionInUrl: false
+                                detectSessionInUrl: false,
+                                storage: { // Dummy storage to strictly prevent localStorage access
+                                    getItem: () => null,
+                                    setItem: () => {},
+                                    removeItem: () => {},
+                                },
                             }
                         });
 
                         const fakeEmail = `user-${Date.now()}-${Math.floor(Math.random()*1000)}@quotesystem.local`;
 
-                        // 1. Sign up user using the temporary client
+                        // 1. Sign up user using the isolated temp client
                         const { data: signUpData, error: signUpError } = await tempClient.auth.signUp({
                             email: fakeEmail,
                             password: newPassword,
@@ -286,8 +288,6 @@ export function addEventListeners() {
                         if (!signUpData.user) throw new Error("用户创建失败: 未返回用户数据。");
 
                         // 2. Use the MAIN client (Admin) to insert the profile.
-                        // This works because we never logged out the admin.
-                        // The admin inserts the row for the new user ID.
                         const newProfile = {
                             id: signUpData.user.id,
                             full_name: newUsername,
@@ -298,10 +298,27 @@ export function addEventListeners() {
                         const { error: profileError } = await supabase.from('profiles').upsert(newProfile);
 
                         if (profileError) {
-                            console.error("Failed to upsert profile:", profileError);
-                            // Even if this fails, we try to show success if the user was created. 
-                            // But usually, if this fails, the user won't show in the list properly.
-                            throw new Error(`用户创建成功，但资料写入失败: ${profileError.message}`);
+                            console.error("Failed to upsert profile. Rolling back user creation...", profileError);
+                            
+                            // ROLLBACK STRATEGY: 
+                            // If profile creation fails (likely RLS), delete the Auth User to prevent "No Name" zombie users.
+                            // We use the 'delete_user' RPC we just fixed.
+                            await supabase.rpc('delete_user', { user_id: signUpData.user.id });
+                            
+                            if (profileError.message.includes('row-level security')) {
+                                const sqlFixMessage = `
+                                    <p><strong>数据库权限不足 (RLS)。</strong></p>
+                                    <p>您已成功创建登录账号，但因为数据库安全策略，无法写入该用户的资料。系统已自动撤销此操作。</p>
+                                    <p>请在 Supabase SQL Editor 中运行此命令以允许管理员添加用户：</p>
+                                    <pre style="background: #f1f5f9; padding: 0.8rem; border-radius: 4px; font-size: 0.75rem; text-align: left; overflow: auto;">create policy "Admins can manage all profiles"
+on public.profiles for all to authenticated
+using ( (select role from public.profiles where id = auth.uid()) = 'admin' )
+with check ( (select role from public.profiles where id = auth.uid()) = 'admin' );</pre>
+                                `;
+                                throw new Error(sqlFixMessage); // Throw HTML string to be caught below
+                            } else {
+                                throw new Error(`资料写入失败 (已回滚): ${profileError.message}`);
+                            }
                         }
 
                         // 3. Success
@@ -319,17 +336,30 @@ export function addEventListeners() {
 
                     } catch (error: any) {
                         console.error("Add user error:", error);
+                        
                         let msg = error.message;
                         if (msg.includes('rate limit')) msg = "操作过于频繁，请稍后再试。";
-                        state.customModal.errorMessage = `添加失败: ${msg}`;
-                        confirmButton.disabled = false;
-                        confirmButton.innerHTML = '确认添加';
-                        renderApp();
+                        
+                        // Check if it's our HTML error message (starts with <p>)
+                        if (msg.trim().startsWith('<')) {
+                             showModal({ 
+                                title: '添加失败 - 需要配置权限', 
+                                message: msg, 
+                                isDanger: true,
+                                confirmText: '我已知晓',
+                                showCancel: false,
+                                isDismissible: false
+                            });
+                        } else {
+                            state.customModal.errorMessage = `添加失败: ${msg}`;
+                            confirmButton.disabled = false;
+                            confirmButton.innerHTML = '确认添加';
+                            renderApp();
+                        }
                     }
                 }
             });
         } else if (button.classList.contains('delete-user-btn')) {
-            // --- REFACTORED DELETE USER LOGIC ---
             const row = button.closest('tr');
             const userId = row?.dataset.userId;
             const userName = row?.querySelector('td:first-child')?.textContent;
@@ -353,11 +383,16 @@ export function addEventListeners() {
                     }
 
                     try {
-                        // Wrapped in try/catch to ensure UI resets even on network failure
-                        const { error } = await supabase.rpc('delete_user', { user_id: userId });
+                        // Wrap RPC call in a timeout race to prevent infinite loading
+                        const deletePromise = supabase.rpc('delete_user', { user_id: userId });
+                        const timeoutPromise = new Promise((_, reject) => 
+                            setTimeout(() => reject(new Error('请求超时 (10秒)。可能是数据库锁定或网络问题。请刷新页面重试。')), 10000)
+                        );
+
+                        const { error } = await Promise.race([deletePromise, timeoutPromise]) as any;
                         
                         if (error) {
-                            throw error; // Throw to catch block to handle UI
+                            throw error;
                         }
 
                         // Success path
@@ -368,43 +403,31 @@ export function addEventListeners() {
                     } catch (error: any) {
                         console.error("Delete failed:", error);
                         
-                        // SQL Fix Message Logic
                         const sqlFixMessage = `
-                            <p style="margin-bottom: 1rem;">删除操作失败。这通常是因为数据库缺少必要的权限配置或外键约束阻止了删除。</p>
-                            <p style="margin-bottom: 0.5rem;">请<strong>一次性</strong>运行以下完整修复脚本。它会重置删除函数并清理相关权限：</p>
-                            <ol style="text-align: left; margin: 1rem 0; padding-left: 1.5rem; list-style-position: inside;">
-                              <li style="margin-bottom: 0.5rem;">登录 <a href="https://app.supabase.com/" target="_blank" rel="noopener noreferrer">Supabase SQL Editor</a>。</li>
-                              <li style="margin-bottom: 0.5rem;">点击 <strong>+ New query</strong>。</li>
-                              <li style="margin-bottom: 0.5rem;">粘贴并运行下方代码：</li>
-                            </ol>
-                            <pre style="background-color: #f1f5f9; border-radius: 4px; padding: 0.8rem; text-align: left; white-space: pre-wrap; word-break: break-all; font-size: 0.75rem; line-height: 1.4; max-height: 200px; overflow-y: auto;"><code>-- 1. Create a safe delete function that handles profiles first
-create or replace function public.delete_user(user_id uuid) 
+                            <p style="margin-bottom: 1rem;">删除操作失败。</p>
+                            <p><strong>错误原因:</strong> ${error.message}</p>
+                            <hr style="margin: 1rem 0; border:0; border-top:1px solid #eee;">
+                            <p style="margin-bottom: 0.5rem; font-size: 0.9rem;">如果问题持续，请在 Supabase SQL Editor 中运行此修复脚本：</p>
+                            <pre style="background-color: #f1f5f9; border-radius: 4px; padding: 0.8rem; text-align: left; white-space: pre-wrap; word-break: break-all; font-size: 0.75rem; line-height: 1.4; max-height: 150px; overflow-y: auto;"><code>create or replace function public.delete_user(user_id uuid) 
 returns void 
 language plpgsql 
 security definer 
 as $$
 begin
-  -- Manually delete from public tables first to avoid FK issues if cascade is missing
   delete from public.profiles where id = user_id;
   delete from public.login_logs where user_id = user_id;
-  -- Then delete from auth
   perform auth.admin_delete_user(user_id);
 end;
 $$;
-
--- 2. Grant permission to authenticated users (application logic checks for admin role)
-grant execute on function public.delete_user(uuid) to authenticated;
-</code></pre>
-                            <p style="margin-top: 1rem; font-size: 0.9rem;">错误详情: ${error.message}</p>
+grant execute on function public.delete_user(uuid) to authenticated;</code></pre>
                         `;
 
                         showModal({ 
-                            title: '需要数据库修复', 
+                            title: '删除失败', 
                             message: sqlFixMessage, 
                             isDanger: true,
-                            confirmText: '我已运行脚本，重试删除',
-                            showCancel: true,
-                            cancelText: '取消',
+                            confirmText: '好的，我已知晓',
+                            showCancel: false,
                             isDismissible: false,
                             onConfirm: async () => {
                                 state.showCustomModal = false;
