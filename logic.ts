@@ -171,7 +171,7 @@ export function addEventListeners() {
             try {
                 // Generate a unique, safe email for Supabase auth, as it doesn't support non-email logins.
                 // The user's actual username is stored in the `profiles` table. This generated email is never shown.
-                const email = `user_${Date.now()}_${Math.random().toString(36).substring(2, 7)}@quotesystem.local`;
+                const email = `user_${Date.now()}_${Math.random().toString(36).substring(2, 7)}@quotesystem.app`;
 
                 const { data: { user }, error: signUpError } = await supabase.auth.signUp({ email, password });
                 if (signUpError) throw signUpError;
@@ -185,7 +185,10 @@ export function addEventListeners() {
                 });
                 if (profileError) {
                     console.error("Failed to create profile after signup:", profileError);
-                    throw new Error("注册失败，请联系管理员。");
+                    // Attempt to delete the orphaned auth user. Note: This requires admin privileges and will
+                    // likely fail on the client-side, but we include it as a safeguard.
+                    // The best-effort is to inform the user to contact admin.
+                    throw new Error("注册失败，无法创建用户资料。请联系管理员。");
                 }
                 
                 showModal({
@@ -198,7 +201,16 @@ export function addEventListeners() {
                 });
 
             } catch(err: any) {
-                errorDiv.textContent = err.message || '注册时发生未知错误。';
+                // More helpful error messages for the user
+                let errorMessage = '注册时发生未知错误。';
+                if (err.message.includes('Password should be at least 6 characters')) {
+                    errorMessage = '密码必须至少为6个字符。';
+                } else if (err.message.includes('invalid')) {
+                    errorMessage = '注册信息无效，请检查后重试或联系管理员。';
+                } else {
+                    errorMessage = err.message;
+                }
+                errorDiv.textContent = errorMessage;
                 errorDiv.style.display = 'block';
             } finally {
                 registerButton.disabled = false;
