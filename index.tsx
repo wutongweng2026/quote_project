@@ -565,7 +565,6 @@ function addEventListeners() {
                 if (error) throw error;
                 if (!data.user) throw new Error('登录失败，请重试。');
                 
-                // After successful login, insert a log
                 await supabase.from('login_logs').insert({
                     user_id: data.user.id,
                     user_agent: navigator.userAgent
@@ -595,7 +594,12 @@ function addEventListeners() {
                  );
                  if (error) throw error;
                  
-                 await loadAllData(true); // partial refresh
+                 if (!state.priceData.prices[category]) {
+                    state.priceData.prices[category] = {};
+                 }
+                 state.priceData.prices[category][model] = price;
+                 render();
+
                  target.reset();
                  ($('#quick-add-category-input') as HTMLInputElement).focus();
             });
@@ -700,21 +704,15 @@ function addEventListeners() {
 }
 
 // --- INITIALIZATION ---
-async function loadAllData(partialRefresh = false) {
+async function loadAllData() {
     try {
-        const requiredFetches = [
+        const [itemsRes, discountsRes, markupsRes] = await Promise.all([
             supabase.from('quote_items').select('*'),
             supabase.from('quote_discounts').select('*'),
             supabase.from('quote_markups').select('*')
-        ];
-
-        if (!partialRefresh) {
-            requiredFetches.push(supabase.from('profiles').select('*'));
-        }
-
-        const [itemsRes, discountsRes, markupsRes, profilesRes] = await Promise.all(requiredFetches);
+        ]);
         
-        const errors = [itemsRes.error, discountsRes.error, markupsRes.error, profilesRes?.error].filter((e): e is PostgrestError => !!e);
+        const errors = [itemsRes.error, discountsRes.error, markupsRes.error].filter((e): e is PostgrestError => !!e);
         if (errors.length > 0) throw new Error(errors.map(e => e.message).join(', '));
 
         const itemsData: DbQuoteItem[] = itemsRes.data || [];
@@ -726,10 +724,7 @@ async function loadAllData(partialRefresh = false) {
 
         state.priceData.tieredDiscounts = discountsRes.data || [];
         state.priceData.markupPoints = markupsRes.data || [];
-        if (!partialRefresh) {
-            state.profiles = profilesRes.data || [];
-        }
-
+        
         if (state.priceData.markupPoints.length > 0 && state.markupPoints === 0) {
             state.markupPoints = state.priceData.markupPoints[0].id;
         }
@@ -738,14 +733,13 @@ async function loadAllData(partialRefresh = false) {
     } catch (error: any) {
         state.appStatus = 'error';
         state.errorMessage = error.message;
-        state.currentUser = null; // Log out on data fetch error
+        state.currentUser = null;
     }
     render();
 }
 
 supabase.auth.onAuthStateChange(async (event, session) => {
     if (session?.user) {
-        // User is logged in, fetch their profile
         const { data: profile, error } = await supabase
             .from('profiles')
             .select('id, full_name, role')
@@ -753,21 +747,34 @@ supabase.auth.onAuthStateChange(async (event, session) => {
             .single();
 
         if (error) {
-            state.appStatus = 'error';
-            state.errorMessage = `Could not fetch user profile: ${error.message}`;
+            console.error(`Could not fetch user profile: ${error.message}`);
             state.currentUser = null;
+            state.profiles = [];
+            await supabase.auth.signOut();
         } else if (profile) {
             state.currentUser = { ...profile, auth: session.user };
-            if (state.appStatus !== 'ready') {
-                await loadAllData();
+            
+            if (profile.role === 'admin') {
+                const { data: allProfiles, error: profilesError } = await supabase
+                    .from('profiles')
+                    .select('*');
+                if (profilesError) {
+                    showModal({ title: '后台错误', message: `无法加载用户列表: ${profilesError.message}` });
+                    state.profiles = [profile]; 
+                } else {
+                    state.profiles = allProfiles || [];
+                }
+            } else {
+                state.profiles = [profile];
             }
         }
     } else {
-        // User is logged out
         state.currentUser = null;
+        state.profiles = [];
     }
+    
     render();
 });
 
 addEventListeners();
-// Initial load is now handled by the onAuthStateChange listener
+loadAllData();
