@@ -177,7 +177,7 @@
         .header-actions {
             display: flex;
             align-items: center;
-            gap: 1rem;
+            gap: 1.5rem;
         }
         .user-email-display {
             background-color: rgba(255, 255, 255, 0.15);
@@ -187,8 +187,11 @@
         }
         .update-timestamp {
             font-size: 0.8rem;
-            opacity: 0.8;
+            opacity: 0.9;
             white-space: nowrap;
+            background-color: rgba(255, 255, 255, 0.1);
+            padding: 0.2rem 0.6rem;
+            border-radius: 4px;
         }
         .admin-button {
             background: rgba(255,255,255,0.2);
@@ -558,7 +561,10 @@
         .user-actions button:hover { opacity: 0.8; }
         .approve-user-btn { background-color: var(--primary-color); }
         .delete-user-btn { background-color: var(--error-color); margin-left: 0.5rem; }
-
+        .permission-toggle-btn {
+            background-color: var(--secondary-color);
+            margin-right: 0.5rem;
+        }
         @keyframes fadeIn {
             from { opacity: 0; }
             to { opacity: 1; }

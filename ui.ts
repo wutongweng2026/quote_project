@@ -25,6 +25,8 @@ export function renderApp() {
         html = renderAdminPanel();
     } else if (state.view === 'userManagement' && state.currentUser.role === 'admin') {
         html = renderUserManagementPanel();
+    } else if (state.view === 'loginLog' && state.currentUser.role === 'admin') {
+        html = renderLoginLogPanel();
     } else {
         html = renderQuoteTool();
     }
@@ -108,12 +110,16 @@ function renderCustomModal() {
 function renderQuoteTool() {
     const totals = calculateTotals();
     const finalConfigText = getFinalConfigText();
+    const lastUpdatedDate = state.lastUpdated ? new Date(state.lastUpdated).toLocaleString('zh-CN', { dateStyle: 'short', timeStyle: 'short'}) : '暂无记录';
+    
     return `
         <div class="quoteContainer">
             <header class="quoteHeader">
                 <h1>产品报价系统 <span>v2.0 - 龙盛科技</span></h1>
                  <div class="header-actions">
+                    <span class="update-timestamp">数据更新于: ${lastUpdatedDate}</span>
                     <span class="user-email-display">用户: ${state.currentUser?.full_name || state.currentUser?.auth.email}</span>
+                    ${state.currentUser?.role === 'admin' ? '<button class="admin-button" id="login-log-btn">登录日志</button>' : ''}
                     ${state.currentUser?.role === 'admin' ? '<button class="admin-button" id="user-management-btn">用户管理</button>' : ''}
                     ${state.currentUser?.role === 'admin' ? '<button class="admin-button" id="app-view-toggle-btn">后台管理</button>' : ''}
                     <button class="admin-button" id="logout-btn">退出</button>
@@ -218,14 +224,33 @@ function renderAddCategoryRow() {
     `;
 }
 
-function renderAdminPanel() {
+export function renderAdminDataTableBody() {
     const searchTerm = (state.adminSearchTerm || '').toLowerCase();
     const filteredPriceEntries = Object.entries(state.priceData.prices)
         .map(([category, models]) => {
             const filteredModels = Object.entries(models).filter(([model]) => category.toLowerCase().includes(searchTerm) || model.toLowerCase().includes(searchTerm));
-            return [category, Object.fromEntries(filteredModels)];
+            return [category, Object.fromEntries(filteredModels)] as [string, typeof models];
         }).filter(([, models]) => Object.keys(models).length > 0);
-    
+
+    if (filteredPriceEntries.length === 0) {
+        return `<tr><td colspan="4" style="text-align:center;">未找到匹配项</td></tr>`;
+    }
+
+    return filteredPriceEntries.map(([category, models]) => 
+        Object.entries(models).map(([model, price]) => `
+            <tr data-category="${category}" data-model="${model}">
+                <td>${category}</td> <td>${model}</td>
+                <td><input type="number" class="price-input" value="${price}" /></td>
+                <td>
+                    <button class="admin-save-item-btn">保存</button>
+                    <button class="admin-delete-item-btn" data-category="${category}" data-model="${model}">删除</button>
+                </td>
+            </tr>`
+        ).join('')
+    ).join('');
+}
+
+function renderAdminPanel() {
     const syncStatusMessages = {
         idle: '',
         saving: '正在保存...',
@@ -300,18 +325,45 @@ function renderAdminPanel() {
                         <table class="admin-data-table">
                             <thead><tr><th>分类</th><th>型号</th><th>单价</th><th>操作</th></tr></thead>
                             <tbody>
-                                ${filteredPriceEntries.map(([category, models]) => Object.entries(models).map(([model, price]) => `
-                                    <tr data-category="${category}" data-model="${model}">
-                                        <td>${category}</td> <td>${model}</td>
-                                        <td><input type="number" class="price-input" value="${price}" /></td>
-                                        <td>
-                                            <button class="admin-save-item-btn">保存</button>
-                                            <button class="admin-delete-item-btn" data-category="${category}" data-model="${model}">删除</button>
-                                        </td>
-                                    </tr>`).join('')).join('') || `<tr><td colspan="4" style="text-align:center;">未找到匹配项</td></tr>`}
+                                ${renderAdminDataTableBody()}
                             </tbody>
                         </table>
                     </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    `;
+}
+
+function renderLoginLogPanel() {
+    return `
+    <div class="adminContainer">
+        <header class="adminHeader">
+            <h2>登录日志 (最近100条)</h2>
+            <div class="header-actions-admin">
+                <button id="back-to-quote-btn" class="admin-button">返回报价首页</button>
+            </div>
+        </header>
+        <div class="admin-content">
+            <div class="admin-section">
+                 <div class="admin-section-body">
+                    <table class="admin-data-table">
+                        <thead>
+                            <tr>
+                                <th>用户名</th>
+                                <th>登录时间</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${state.loginLogs.map(log => `
+                                <tr>
+                                    <td>${log.user_name || '未知用户'}</td>
+                                    <td>${new Date(log.login_at).toLocaleString('zh-CN')}</td>
+                                </tr>`).join('')}
+                            ${state.loginLogs.length === 0 ? '<tr><td colspan="2" style="text-align: center;">没有日志记录。</td></tr>' : ''}
+                        </tbody>
+                    </table>
                 </div>
             </div>
         </div>
@@ -342,11 +394,10 @@ function renderUserManagementPanel() {
                             ${state.profiles.map(profile => `
                                 <tr data-user-id="${profile.id}">
                                     <td>${profile.full_name || 'N/A'}</td>
-                                    <td>
-                                        <select class="user-role-select" ${profile.id === state.currentUser?.id ? 'disabled' : ''}>
-                                            <option value="sales" ${profile.role === 'sales' ? 'selected' : ''}>Sales</option>
-                                            <option value="admin" ${profile.role === 'admin' ? 'selected' : ''}>Admin</option>
-                                        </select>
+                                     <td>
+                                        <span class="status-badge ${profile.role === 'admin' ? 'approved' : ''}" style="background-color: ${profile.role === 'admin' ? '#bfdbfe' : '#e0e7ff'}; color: ${profile.role === 'admin' ? '#1e40af' : '#3730a3'};">
+                                            ${profile.role === 'admin' ? '管理员' : '销售'}
+                                        </span>
                                     </td>
                                     <td>
                                         <span class="status-badge ${profile.is_approved ? 'approved' : 'pending'}">
@@ -355,7 +406,16 @@ function renderUserManagementPanel() {
                                     </td>
                                     <td class="user-actions">
                                         ${!profile.is_approved ? `<button class="approve-user-btn">批准</button>` : ''}
-                                        ${profile.id !== state.currentUser?.id ? `<button class="delete-user-btn">删除</button>` : ''}
+                                        ${profile.id !== state.currentUser?.id 
+                                            ? `
+                                                ${profile.role === 'admin'
+                                                    ? `<button class="permission-toggle-btn" data-action="revoke">撤销后台权限</button>`
+                                                    : `<button class="permission-toggle-btn" data-action="grant">授予后台权限</button>`
+                                                }
+                                                <button class="delete-user-btn">删除</button>
+                                            ` 
+                                            : '<span style="color: var(--secondary-text-color); font-style: italic;">(当前用户)</span>'
+                                        }
                                     </td>
                                 </tr>`).join('')}
                         </tbody>

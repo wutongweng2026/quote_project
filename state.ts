@@ -47,4 +47,6 @@ export const state: AppState = {
         cancelText: '取消', showCancel: false, isDanger: false,
     },
     syncStatus: 'idle',
+    lastUpdated: null,
+    loginLogs: [],
 };

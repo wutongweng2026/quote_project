@@ -1,10 +1,26 @@
 import { state, supabase, getInitialSelection } from './state';
-import { renderApp, showModal, updateTotalsUI, setSyncStatus } from './ui';
+import { renderApp, showModal, updateTotalsUI, setSyncStatus, renderAdminDataTableBody } from './ui';
 import { getFinalConfigText, calculateTotals } from './calculations';
 import type { PostgrestError } from '@supabase/supabase-js';
 
 declare var XLSX: any;
 const $ = (selector: string) => document.querySelector(selector);
+
+// --- HELPER FUNCTIONS ---
+
+async function updateLastUpdatedTimestamp() {
+    const newTimestamp = new Date().toISOString();
+    const { error } = await supabase.from('quote_meta').upsert({ 
+        key: 'last_prices_updated', 
+        value: newTimestamp
+    });
+    if (error) {
+        console.error("Failed to update timestamp:", error);
+    } else {
+        state.lastUpdated = newTimestamp; // Update local state for immediate UI feedback
+    }
+}
+
 
 // --- LOGIC FUNCTIONS ---
 
@@ -206,6 +222,7 @@ export function addEventListeners() {
                  }
                  if (!state.priceData.prices[category]) state.priceData.prices[category] = {};
                  state.priceData.prices[category][model] = price;
+                 await updateLastUpdatedTimestamp();
                  renderApp();
                  target.reset();
                  ($('#quick-add-category-input') as HTMLInputElement).focus();
@@ -313,6 +330,16 @@ export function addEventListeners() {
         } else if (button.id === 'user-management-btn') {
             state.view = 'userManagement';
             needsRender = true;
+        } else if (button.id === 'login-log-btn') {
+            state.view = 'loginLog';
+            const { data, error } = await supabase.from('login_logs').select('*').order('login_at', { ascending: false }).limit(100);
+            if (error) {
+                showModal({ title: '错误', message: `无法加载登录日志: ${error.message}` });
+                state.loginLogs = [];
+            } else {
+                state.loginLogs = data;
+            }
+            needsRender = true;
         } else if (button.id === 'app-view-toggle-btn') {
             state.view = 'admin';
             needsRender = true;
@@ -336,6 +363,26 @@ export function addEventListeners() {
                 const profile = state.profiles.find(p => p.id === userId);
                 if (profile) profile.is_approved = true;
                 needsRender = true;
+            }
+        } else if (button.classList.contains('permission-toggle-btn')) {
+            const row = button.closest('tr');
+            const userId = row?.dataset.userId;
+            const action = button.dataset.action;
+            if (!userId || !action) return;
+
+            const newRole = action === 'grant' ? 'admin' : 'sales';
+            const profile = state.profiles.find(p => p.id === userId);
+            if (!profile) return;
+            
+            const originalRole = profile.role;
+            profile.role = newRole; // Optimistic UI update
+            renderApp();
+
+            const { error } = await supabase.from('profiles').update({ role: newRole }).eq('id', userId);
+            if (error) {
+                profile.role = originalRole; // Revert on failure
+                showModal({ title: '错误', message: `更新权限失败: ${error.message}` });
+                renderApp();
             }
         } else if (button.classList.contains('delete-user-btn')) {
             const row = button.closest('tr');
@@ -390,6 +437,7 @@ export function addEventListeners() {
                 if (state.priceData.prices[category]) {
                     state.priceData.prices[category][model] = newPrice;
                 }
+                await updateLastUpdatedTimestamp();
             });
         } else if (button.id === 'generate-quote-btn') {
             handleExportExcel();
@@ -455,7 +503,10 @@ export function addEventListeners() {
 
         if (target.id === 'admin-search-input') {
             state.adminSearchTerm = target.value;
-            renderApp();
+            const tableBody = $('.admin-data-table tbody');
+            if (tableBody) {
+                tableBody.innerHTML = renderAdminDataTableBody();
+            }
             return;
         }
 
@@ -529,6 +580,7 @@ export function addEventListeners() {
                         state.priceData.prices[item.category][item.model] = item.price;
                     });
                     
+                    await updateLastUpdatedTimestamp();
                     showModal({ title: '导入成功', message: `成功导入/更新了 ${itemsToUpsert.length} 个配件。`});
                     renderApp();
 
@@ -550,18 +602,6 @@ export function addEventListeners() {
         } else if (row?.dataset.category && target.classList.contains('model-select')) {
             state.selection[row.dataset.category].model = (target as HTMLSelectElement).value;
             updateTotalsUI();
-        } else if (target.classList.contains('user-role-select')) {
-            const userId = (target as HTMLSelectElement).closest('tr')?.dataset.userId;
-            if (!userId) return;
-            const newRole = (target as HTMLSelectElement).value as 'admin' | 'sales';
-            const { error } = await supabase.from('profiles').update({ role: newRole }).eq('id', userId);
-            if (error) {
-                showModal({ title: '错误', message: `更新角色失败: ${error.message}` });
-                (target as HTMLSelectElement).value = state.profiles.find(p => p.id === userId)?.role || 'sales';
-            } else {
-                const profile = state.profiles.find(p => p.id === userId);
-                if (profile) profile.role = newRole;
-            }
         }
     });
 }

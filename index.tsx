@@ -62,6 +62,16 @@ async function loadAllData(): Promise<boolean> {
 
         const { data: markupsData, error: markupsError } = await supabase.from('quote_markups').select('*');
         if (markupsError) throw markupsError;
+        
+        const { data: metaData, error: metaError } = await supabase
+            .from('quote_meta')
+            .select('value')
+            .eq('key', 'last_prices_updated')
+            .single();
+
+        if (metaError && metaError.code !== 'PGRST116') { // Ignore 'range not found' error if key doesn't exist
+            throw metaError;
+        }
 
         state.priceData.prices = (itemsData || []).reduce((acc, item) => {
             if (!acc[item.category]) acc[item.category] = {};
@@ -71,6 +81,8 @@ async function loadAllData(): Promise<boolean> {
 
         state.priceData.tieredDiscounts = discountsData || [];
         state.priceData.markupPoints = markupsData || [];
+        state.lastUpdated = metaData?.value as string | null;
+
         
         if (state.priceData.markupPoints.length > 0 && state.markupPoints === 0) {
             state.markupPoints = state.priceData.markupPoints[0].id;
@@ -131,6 +143,12 @@ supabase.auth.onAuthStateChange(async (event, session) => {
                     state.profiles = [profile];
                 }
                 state.view = 'quote';
+                
+                // Insert a record into the login log
+                await supabase.from('login_logs').insert({
+                    user_id: profile.id,
+                    user_name: profile.full_name
+                });
             }
         } else {
             showModal({
