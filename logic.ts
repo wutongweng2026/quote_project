@@ -1,10 +1,7 @@
 import { state, supabase, getInitialSelection } from './state';
 import { renderApp, showModal, updateTotalsUI, setSyncStatus } from './ui';
-// FIX: Import calculateTotals function to fix 'Cannot find name calculateTotals' error.
 import { getFinalConfigText, calculateTotals } from './calculations';
-import { CONFIG_ROWS } from './config';
 import type { PostgrestError } from '@supabase/supabase-js';
-import type { AppState } from './types';
 
 declare var XLSX: any;
 const $ = (selector: string) => document.querySelector(selector);
@@ -178,7 +175,6 @@ export function addEventListeners() {
                     message: '您的账户已创建，请等待管理员审核批准后即可登录。',
                     onConfirm: () => {
                         state.view = 'login';
-                        renderApp();
                     }
                 });
 
@@ -219,6 +215,31 @@ export function addEventListeners() {
 
     appContainer.addEventListener('click', async (e) => {
         const target = e.target as HTMLElement;
+
+        // --- MODAL CLICK HANDLER ---
+        // This logic runs first to ensure modals can always be closed.
+        if (state.showCustomModal) {
+            const confirmButton = target.closest('#custom-modal-confirm-btn');
+            const cancelButton = target.closest('#custom-modal-cancel-btn');
+            const overlay = target.matches('.modal-overlay');
+
+            if (confirmButton) {
+                state.customModal.onConfirm?.(); // Execute callback if it exists
+                state.showCustomModal = false;
+                renderApp();
+                return; // Stop further processing
+            }
+            if (cancelButton || overlay) {
+                state.showCustomModal = false;
+                renderApp();
+                return; // Stop further processing
+            }
+            // If the click is inside the modal content but not a button, do nothing.
+            if(target.closest('.modal-content')) {
+                return;
+            }
+        }
+        
         const link = target.closest('a');
         if (link) {
             if (link.id === 'go-to-register') {
@@ -395,10 +416,24 @@ export function addEventListeners() {
             const threshold = parseFloat((row.querySelector('.tier-threshold-input') as HTMLInputElement)?.value || '0');
             const rate = parseFloat((row.querySelector('.tier-rate-input') as HTMLInputElement)?.value || '10');
             ({ error } = await supabase.from('quote_discounts').update({ threshold, rate }).eq('id', id));
+             if (!error) {
+                const tier = state.priceData.tieredDiscounts.find(t => t.id === id);
+                if (tier) {
+                    tier.threshold = threshold;
+                    tier.rate = rate;
+                }
+            }
         } else if (row.classList.contains('markup-point-row')) {
             const alias = (row.querySelector('.markup-alias-input') as HTMLInputElement)?.value || '';
             const value = parseFloat((row.querySelector('.markup-value-input') as HTMLInputElement)?.value || '0');
             ({ error } = await supabase.from('quote_markups').update({ alias, value }).eq('id', id));
+            if (!error) {
+                const point = state.priceData.markupPoints.find(p => p.id === id);
+                if (point) {
+                    point.alias = alias;
+                    point.value = value;
+                }
+            }
         }
         
         if (error) {

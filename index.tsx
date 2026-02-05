@@ -1,7 +1,56 @@
 import { supabase, state } from './state';
 import { renderApp, showModal } from './ui';
 import { addEventListeners } from './logic';
+import { seedDataObject } from './seedData';
 import type { DbProfile, Prices } from './types';
+
+async function seedDatabaseIfNeeded() {
+    try {
+        const { count, error: countError } = await supabase
+            .from('quote_items')
+            .select('*', { count: 'exact', head: true });
+
+        if (countError) {
+            console.error("Error checking for existing data:", countError);
+            return;
+        }
+
+        if (count !== null && count > 0) {
+            return; // Data exists, no need to seed
+        }
+
+        console.log("Database appears to be empty. Seeding initial data...");
+
+        // 1. Seed Prices (quote_items)
+        const itemsToInsert = Object.entries(seedDataObject.prices)
+            .flatMap(([category, models]) =>
+                Object.entries(models).map(([model, price]) => ({
+                    category,
+                    model,
+                    price,
+                }))
+            );
+
+        const { error: itemsError } = await supabase.from('quote_items').insert(itemsToInsert);
+        if (itemsError) {
+            console.error("Error seeding quote_items:", itemsError);
+        } else {
+            console.log(`Seeded ${itemsToInsert.length} items successfully.`);
+        }
+
+        // 2. Seed Discounts (quote_discounts)
+        const discountsToInsert = seedDataObject.tieredDiscounts;
+        const { error: discountsError } = await supabase.from('quote_discounts').insert(discountsToInsert);
+        if (discountsError) {
+            console.error("Error seeding quote_discounts:", discountsError);
+        } else {
+            console.log(`Seeded ${discountsToInsert.length} discounts successfully.`);
+        }
+    } catch (error) {
+        console.error("An unexpected error occurred during the seeding process:", error);
+    }
+}
+
 
 async function loadAllData(): Promise<boolean> {
     try {
@@ -101,4 +150,10 @@ supabase.auth.onAuthStateChange(async (event, session) => {
     renderApp();
 });
 
-addEventListeners();
+
+(async () => {
+    await seedDatabaseIfNeeded();
+    addEventListeners();
+    // Trigger initial auth state check
+    await supabase.auth.getSession();
+})();
