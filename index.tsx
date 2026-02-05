@@ -201,11 +201,13 @@ supabase.auth.onAuthStateChange(async (event, session) => {
                 }
                 state.view = 'quote';
                 
-                // Background task: log login
+                // Background task: log login - using then() to avoid catch/any TS issues
                 supabase.from('login_logs').insert({
                     user_id: profile.id,
                     user_name: profile.full_name
-                }).catch(e => console.error("Login logging failed:", e));
+                }).then(({ error: logError }) => {
+                    if (logError) console.error("Login logging failed:", logError);
+                });
             }
         }
     } else {
