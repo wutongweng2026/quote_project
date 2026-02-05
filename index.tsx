@@ -121,6 +121,7 @@ supabase.auth.onAuthStateChange(async (event, session) => {
 
         if (profile) {
             if (!profile.is_approved && profile.role !== 'admin') {
+                state.appStatus = 'ready';
                 showModal({
                     title: '账户待审批',
                     message: '您的账户正在等待管理员批准，请稍后再试。',
@@ -152,6 +153,7 @@ supabase.auth.onAuthStateChange(async (event, session) => {
                 });
             }
         } else {
+            state.appStatus = 'ready';
             showModal({
                 title: '登录错误',
                 message: '您的账户存在，但未能找到对应的用户资料。请联系管理员。',

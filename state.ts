@@ -29,7 +29,7 @@ export const getInitialSelection = (): SelectionState => ({
 });
 
 export const state: AppState = {
-    appStatus: 'ready', // Start as ready to show login page immediately
+    appStatus: 'loading', // Start as 'loading' to match initial HTML
     errorMessage: null,
     priceData: { prices: {}, tieredDiscounts: [], markupPoints: [] },
     profiles: [],
