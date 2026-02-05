@@ -506,11 +506,11 @@ export function addEventListeners() {
                     
                     const headers = json[0].map(h => String(h).trim());
                     const categoryIndex = headers.findIndex(h => ['分类', 'Category'].includes(h));
-                    const modelIndex = headers.findIndex(h => ['型号', 'Model'].includes(h));
-                    const priceIndex = headers.findIndex(h => ['单价', '成本', 'Price', 'Cost'].includes(h));
+                    const modelIndex = headers.findIndex(h => ['型号', '型号名称', 'Model'].includes(h));
+                    const priceIndex = headers.findIndex(h => ['单价', '成本', '成本单价', 'Price', 'Cost'].includes(h));
 
                     if (categoryIndex === -1 || modelIndex === -1 || priceIndex === -1) {
-                        throw new Error('Excel文件必须包含 "分类", "型号", 和 "单价" 这几列。');
+                        throw new Error('Excel文件必须包含 "分类", "型号"(或"型号名称"), 和 "单价"(或"成本单价") 这几列。');
                     }
 
                     const itemsToUpsert = json.slice(1).map(row => ({
