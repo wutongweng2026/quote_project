@@ -19,11 +19,12 @@ async function seedDatabaseIfNeeded() {
         }
 
         if (count !== null && count > 0) {
-            return;
+            return; // Data exists, no need to seed
         }
 
         console.log("Database appears to be empty. Seeding initial data...");
 
+        // 1. Seed Prices (quote_items)
         const itemsToInsert = Object.entries(seedDataObject.prices)
             .flatMap(([category, models]) =>
                 Object.entries(models).map(([model, price]) => ({
@@ -35,11 +36,20 @@ async function seedDatabaseIfNeeded() {
             );
 
         const { error: itemsError } = await supabase.from('quote_items').insert(itemsToInsert);
-        if (itemsError) console.error("Error seeding quote_items:", itemsError);
+        if (itemsError) {
+            console.error("Error seeding quote_items:", itemsError);
+        } else {
+            console.log(`Seeded ${itemsToInsert.length} items successfully.`);
+        }
 
+        // 2. Seed Discounts (quote_discounts)
         const discountsToInsert = seedDataObject.tieredDiscounts;
         const { error: discountsError } = await supabase.from('quote_discounts').insert(discountsToInsert);
-        if (discountsError) console.error("Error seeding quote_discounts:", discountsError);
+        if (discountsError) {
+            console.error("Error seeding quote_discounts:", discountsError);
+        } else {
+            console.log(`Seeded ${discountsToInsert.length} discounts successfully.`);
+        }
     } catch (error) {
         console.error("An unexpected error occurred during the seeding process:", error);
     }
@@ -51,16 +61,16 @@ async function loadAllData(): Promise<boolean> {
         state.appStatus = 'loading';
         renderApp();
 
-        // 1. 获取远程更新时间
+        // 1. Fetch the remote timestamp first (Fast metadata check)
         const { data: metaData, error: metaError } = await supabase
             .from('quote_meta')
             .select('value')
             .eq('key', 'last_prices_updated')
             .maybeSingle();
-        
+
         const remoteTimestamp = metaData?.value as string | null;
 
-        // 2. 检查本地缓存
+        // 2. Check Local Cache
         const cachedStr = localStorage.getItem(CACHE_KEY);
         if (cachedStr && remoteTimestamp) {
             try {
@@ -81,7 +91,7 @@ async function loadAllData(): Promise<boolean> {
             }
         }
 
-        // 3. 从数据库抓取
+        // 3. Fallback: Fetch all data from database
         console.log('🌐 Fetching fresh data from database...');
         const [
             { data: itemsData, error: itemsError },
@@ -121,21 +131,23 @@ async function loadAllData(): Promise<boolean> {
                 markups: state.priceData.markupPoints,
                 timestamp: remoteTimestamp
             }));
-        } catch (e) {}
+        } catch (e) { }
 
         state.appStatus = 'ready';
         return true;
     } catch (error: any) {
         console.error("LoadAllData Error:", error);
         state.appStatus = 'error';
-        state.errorMessage = `数据加载失败: ${error.message || '未知错误'}`;
+        state.errorMessage = `
+            <h3 style="color: #b91c1c; margin-top:0;">数据加载失败</h3>
+            <p>登录成功，但无法初始化报价数据。</p>
+            <p style="margin-top: 1rem;">原始错误: ${error.message}</p>`;
         return false;
     }
 }
 
 supabase.auth.onAuthStateChange(async (event, session) => {
     if (session?.user) {
-        // 关键点：立即进入加载状态，不要让用户在登录页面等待
         if (state.view === 'login' || state.appStatus !== 'loading') {
             state.appStatus = 'loading';
             renderApp();
@@ -161,7 +173,7 @@ supabase.auth.onAuthStateChange(async (event, session) => {
                 state.appStatus = 'ready';
                 showModal({
                     title: '账户待审批',
-                    message: '您的账户正在等待管理员批准。',
+                    message: '您的账户正在等待管理员批准，请稍后再试。',
                     onConfirm: async () => {
                         state.showCustomModal = false;
                         await supabase.auth.signOut();
@@ -169,8 +181,8 @@ supabase.auth.onAuthStateChange(async (event, session) => {
                 });
                 return;
             }
-            
-            const loadedSuccessfully = await loadAllData(); 
+
+            const loadedSuccessfully = await loadAllData();
 
             if (loadedSuccessfully) {
                 state.currentUser = { ...profile, auth: session.user };
@@ -185,7 +197,7 @@ supabase.auth.onAuthStateChange(async (event, session) => {
                     state.profiles = [profile];
                 }
                 state.view = 'quote';
-                
+
                 supabase.from('login_logs').insert({
                     user_id: profile.id,
                     user_name: profile.full_name
@@ -206,6 +218,6 @@ supabase.auth.onAuthStateChange(async (event, session) => {
 
 (async () => {
     addEventListeners();
-    renderApp(); // 初始渲染登录框
+    renderApp();
     supabase.auth.getSession();
 })();

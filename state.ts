@@ -1,3 +1,4 @@
+
 import { createClient } from '@supabase/supabase-js';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config';
 import type { AppState, SelectionState } from './types';
@@ -5,17 +6,17 @@ import type { AppState, SelectionState } from './types';
 if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
     const appEl = document.querySelector('#app')!;
     appEl.innerHTML = `
-        <div class="app-status-container">
-            <h2>配置错误</h2>
-            <div class="error-details">
-                <p>无法连接到数据库。请确保您的 <strong>config.ts</strong> 文件中已设置好以下环境变量：</p>
-                <ul>
-                    <li><code>SUPABASE_URL</code>: 您的 Supabase 项目 URL</li>
-                    <li><code>SUPABASE_ANON_KEY</code>: 您的 Supabase 项目 anon key</li>
-                </ul>
-            </div>
-        </div>
-    `;
+       <div class="app-status-container">
+           <h2>配置错误</h2>
+           <div class="error-details">
+               <p>无法连接到数据库。请确保您的 <strong>config.ts</strong> 文件中已设置好以下环境变量：</p>
+               <ul>
+                   <li><code>SUPABASE_URL</code>: 您的 Supabase 项目 URL</li>
+                   <li><code>SUPABASE_ANON_KEY</code>: 您的 Supabase 项目 anon key</li>
+               </ul>
+           </div>
+       </div>
+   `;
     throw new Error("Supabase credentials are not configured in the config.ts file.");
 }
 
@@ -29,7 +30,7 @@ export const getInitialSelection = (): SelectionState => ({
 });
 
 export const state: AppState = {
-    appStatus: 'ready', // Set to ready immediately so login view shows up fast
+    appStatus: 'loading', // Start as 'loading' to match initial HTML
     errorMessage: null,
     priceData: { prices: {}, items: [], tieredDiscounts: [], markupPoints: [] },
     profiles: [],

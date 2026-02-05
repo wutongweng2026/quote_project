@@ -1,3 +1,4 @@
+
 import type { User as AuthUser } from '@supabase/supabase-js';
 
 export interface PriceDataItem { [model: string]: number; }
@@ -70,5 +71,5 @@ export interface AppState {
     lastUpdated: string | null;
     loginLogs: DbLoginLog[];
     showFinalQuote: boolean;
-    selectedDiscountId: number | 'none'; 
+    selectedDiscountId: number | 'none';
 }
