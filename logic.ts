@@ -299,29 +299,32 @@ export function addEventListeners() {
                         return;
                     }
                     
-                    // Optimistically clear error and show loading on button
                     const confirmButton = $('#custom-modal-confirm-btn') as HTMLButtonElement;
                     confirmButton.disabled = true;
                     confirmButton.innerHTML = `<span class="spinner"></span> 正在添加`;
                     state.customModal.errorMessage = '';
                     renderApp();
 
-
-                    // Assumes an RPC function 'create_new_user' exists on the backend.
-                    // This is the secure way to create users as an admin without logging out.
-                    const { data, error } = await supabase.rpc('create_new_user', {
-                        full_name: newUsername,
-                        password: newPassword,
-                    });
+                    const { data, error } = await supabase
+                        .rpc('create_new_user', {
+                            full_name: newUsername,
+                            password: newPassword,
+                        })
+                        .single();
 
                     if (error) {
                         state.customModal.errorMessage = `创建失败: ${error.message}`;
                         confirmButton.disabled = false;
                         confirmButton.innerHTML = '确认添加';
                         renderApp();
-                    } else {
+                    } else if (data) {
                         state.profiles.push(data);
                         state.showCustomModal = false;
+                        renderApp();
+                    } else {
+                        state.customModal.errorMessage = `创建失败: 未收到新用户数据。`;
+                        confirmButton.disabled = false;
+                        confirmButton.innerHTML = '确认添加';
                         renderApp();
                     }
                 }
