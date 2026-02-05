@@ -183,11 +183,13 @@ export function addEventListeners() {
                     is_approved: false
                 });
                 if (profileError) {
-                    console.error("Failed to create profile after signup:", profileError);
-                    // Attempt to delete the orphaned auth user. Note: This requires admin privileges and will
-                    // likely fail on the client-side, but we include it as a safeguard.
-                    // The best-effort is to inform the user to contact admin.
-                    throw new Error("注册失败，无法创建用户资料。请联系管理员。");
+                    // An auth user was created, but the profile insertion failed.
+                    // This is most likely a duplicate username. We need to re-throw the original
+                    // error so the catch block can identify the unique constraint violation.
+                    // Deleting the orphaned user requires admin privileges and is not secure from the client.
+                    // An orphaned auth user cannot log in as they have no approved profile.
+                    console.warn(`Orphaned auth user may have been created for username '${username}' due to profile creation failure.`, profileError);
+                    throw profileError;
                 }
                 
                 showModal({
@@ -206,8 +208,8 @@ export function addEventListeners() {
                     const lowerCaseMessage = err.message.toLowerCase();
                     if (lowerCaseMessage.includes('password should be at least')) {
                         errorMessage = '密码太短，至少需要6位字符。';
-                    } else if (lowerCaseMessage.includes('user already registered') || (err.code === '23505' && err.message.includes('full_name'))) {
-                        // The second condition checks for a PostgreSQL unique constraint violation on full_name
+                    } else if (err.code === '23505' || lowerCaseMessage.includes('unique constraint')) { 
+                        // Catches PostgreSQL unique constraint violation, e.g., on username
                         errorMessage = '该用户名已被注册，请尝试其他名称。';
                     } else {
                         // For rate limit and all other errors, show a generic message.

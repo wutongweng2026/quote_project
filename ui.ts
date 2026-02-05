@@ -119,7 +119,6 @@ function renderQuoteTool() {
                 <h1>产品报价系统 <span>v2.0 - 龙盛科技</span></h1>
                  <div class="header-actions">
                     <span class="update-timestamp">数据更新于: ${lastUpdatedDate}</span>
-                    <span class="user-email-display">用户: ${state.currentUser?.full_name || state.currentUser?.auth.email}</span>
                     ${state.currentUser?.role === 'admin' ? '<button class="admin-button" id="login-log-btn">登录日志</button>' : ''}
                     ${state.currentUser?.role === 'admin' ? '<button class="admin-button" id="user-management-btn">用户管理</button>' : ''}
                     ${state.currentUser?.role === 'admin' ? '<button class="admin-button" id="app-view-toggle-btn">后台管理</button>' : ''}
