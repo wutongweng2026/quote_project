@@ -3,7 +3,7 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config';
 const supabaseUrl = SUPABASE_URL;
 const supabaseKey = SUPABASE_ANON_KEY;
 
-import { createClient, SupabaseClient, User as AuthUser } from '@supabase/supabase-js';
+import { createClient, SupabaseClient, User as AuthUser, PostgrestError } from '@supabase/supabase-js';
 
 // --- TYPES ---
 interface PriceDataItem { [model: string]: number; }
@@ -623,8 +623,12 @@ function addEventListeners() {
             state.markupPoints = state.priceData.markupPoints[0]?.id || 0;
             render();
         } 
-        else if (button.classList.contains('admin-delete-item-btn') && button.dataset.category) {
+        else if (button.classList.contains('admin-delete-item-btn')) {
             const { category, model } = button.dataset;
+            if (!category || !model) {
+                showModal({ title: '错误', message: '无法删除：缺少必要的项目信息。' });
+                return;
+            }
             showModal({
                 title: '确认删除', message: `确定要删除 "${category} - ${model}" 吗？`, showCancel: true, isDanger: true, confirmText: '删除',
                 onConfirm: async () => {
@@ -632,25 +636,34 @@ function addEventListeners() {
                      if(error) {
                         showModal({ title: '删除失败', message: error.message });
                      } else {
-                        delete state.priceData.prices[category][model];
-                        if (Object.keys(state.priceData.prices[category]).length === 0) delete state.priceData.prices[category];
+                        if (state.priceData.prices[category]) {
+                            delete state.priceData.prices[category][model];
+                            if (Object.keys(state.priceData.prices[category]).length === 0) {
+                                delete state.priceData.prices[category];
+                            }
+                        }
                         render();
                      }
                 }
             });
         }
-        else if (button && button.classList.contains('admin-save-item-btn')) {
+        else if (button.classList.contains('admin-save-item-btn')) {
             const row = button.closest('tr');
             if(!row) return;
             const { category, model } = row.dataset;
+            if (!category || !model) {
+                showModal({ title: '错误', message: '无法保存：缺少必要的项目信息。' });
+                return;
+            }
             const newPrice = parseFloat((row.querySelector('.price-input') as HTMLInputElement).value);
             
             await withButtonLoading(button, async () => {
                 const { error } = await supabase.from('quote_items').update({ price: newPrice }).match({ category, model });
                 if (error) throw error;
-                state.priceData.prices[category!][model!] = newPrice;
+                if(state.priceData.prices[category]){
+                    state.priceData.prices[category][model] = newPrice;
+                }
             });
-
         } else if (button && button.id === 'generate-quote-btn') {
             handleExportExcel();
         } else if (button && button.id === 'match-config-btn') {
@@ -701,7 +714,7 @@ async function loadAllData(partialRefresh = false) {
 
         const [itemsRes, discountsRes, markupsRes, profilesRes] = await Promise.all(requiredFetches);
         
-        const errors = [itemsRes.error, discountsRes.error, markupsRes.error, profilesRes?.error].filter(Boolean);
+        const errors = [itemsRes.error, discountsRes.error, markupsRes.error, profilesRes?.error].filter((e): e is PostgrestError => !!e);
         if (errors.length > 0) throw new Error(errors.map(e => e.message).join(', '));
 
         const itemsData: DbQuoteItem[] = itemsRes.data || [];
