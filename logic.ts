@@ -158,96 +158,6 @@ export function addEventListeners() {
                 loginButton.disabled = false;
                 loginButton.innerHTML = '登录';
             }
-        } else if (target.id === 'register-form') {
-            const username = (target.elements.namedItem('username') as HTMLInputElement).value;
-            const password = (target.elements.namedItem('password') as HTMLInputElement).value;
-            const registerButton = target.querySelector('.auth-button') as HTMLButtonElement;
-            const errorDiv = $('#register-error') as HTMLDivElement;
-
-            registerButton.disabled = true;
-            registerButton.innerHTML = `<span class="spinner"></span> 正在注册`;
-            errorDiv.style.display = 'none';
-
-            let isRateLimitError = false;
-
-            try {
-                // Generate a new unique email for EVERY registration attempt to bypass potential rate-limiting issues.
-                const email = `user_${Date.now()}_${Math.random().toString(36).substring(2, 7)}@quotesystem.app`;
-
-                const { data: { user }, error: signUpError } = await supabase.auth.signUp({ email, password });
-                if (signUpError) throw signUpError;
-                if (!user) throw new Error('无法创建用户。');
-
-                const { error: profileError } = await supabase.from('profiles').insert({
-                    id: user.id,
-                    full_name: username,
-                    role: 'sales', 
-                    is_approved: false
-                });
-                if (profileError) {
-                    // An auth user was created, but the profile insertion failed.
-                    // This is most likely a duplicate username. We need to re-throw the original
-                    // error so the catch block can identify the unique constraint violation.
-                    // Deleting the orphaned user requires admin privileges and is not secure from the client.
-                    // An orphaned auth user cannot log in as they have no approved profile.
-                    console.warn(`Orphaned auth user may have been created for username '${username}' due to profile creation failure.`, profileError);
-                    throw profileError;
-                }
-                
-                showModal({
-                    title: '注册成功',
-                    message: '您的账户已创建，请等待管理员审核批准后即可登录。',
-                    onConfirm: () => {
-                        state.view = 'login';
-                        renderApp(); // re-render after closing modal
-                    }
-                });
-
-            } catch(err: any) {
-                console.error('Registration error:', err); // For better debugging
-                let errorMessage: string;
-
-                if (err?.message) {
-                    const lowerCaseMessage = err.message.toLowerCase();
-                    if (lowerCaseMessage.includes('password should be at least')) {
-                        errorMessage = '密码太短，至少需要6位字符。';
-                    } else if (err.code === '23505' || lowerCaseMessage.includes('unique constraint') || lowerCaseMessage.includes('duplicate key') || lowerCaseMessage.includes('already exists')) { 
-                        // Catches PostgreSQL unique constraint violation, e.g., on username
-                        errorMessage = '该用户名已被注册，请尝试其他名称。';
-                    } else if (lowerCaseMessage.includes('rate limit exceeded')) {
-                        errorMessage = '您的注册操作过于频繁，请等待倒计时结束后再试。';
-                        isRateLimitError = true;
-                    }
-                    else {
-                        // For all other errors, show a generic message.
-                        errorMessage = '注册失败，请稍后重试。';
-                    }
-                } else {
-                    errorMessage = '注册时发生未知错误，请稍后重试。';
-                }
-                
-                errorDiv.textContent = errorMessage;
-                errorDiv.style.display = 'block';
-            } finally {
-                if (isRateLimitError) {
-                    let countdown = 30;
-                    registerButton.innerHTML = `请稍候 (${countdown}s)`;
-                    const interval = setInterval(() => {
-                        countdown--;
-                        if (countdown > 0) {
-                            registerButton.innerHTML = `请稍候 (${countdown}s)`;
-                        } else {
-                            clearInterval(interval);
-                            registerButton.disabled = false;
-                            registerButton.innerHTML = '注册';
-                        }
-                    }, 1000);
-                } else {
-                    registerButton.disabled = false;
-                    registerButton.innerHTML = '注册';
-                }
-            }
-
         } else if (target.id === 'quick-add-form') {
             const category = ($('#quick-add-category-input') as HTMLInputElement).value.trim();
             const model = ($('#quick-add-model') as HTMLInputElement).value.trim();
@@ -287,9 +197,9 @@ export function addEventListeners() {
             const overlay = target.matches('.modal-overlay');
 
             if (confirmButton) {
-                state.customModal.onConfirm?.(); // Execute callback if it exists
-                state.showCustomModal = false;
-                renderApp();
+                // The onConfirm callback is now responsible for closing the modal
+                // to allow for in-modal validation.
+                state.customModal.onConfirm?.();
                 return; // Stop further processing
             }
             if (cancelButton || overlay) {
@@ -299,21 +209,6 @@ export function addEventListeners() {
             }
             // If the click is inside the modal content but not a button, do nothing.
             if(target.closest('.modal-content')) {
-                return;
-            }
-        }
-        
-        const link = target.closest('a');
-        if (link) {
-            if (link.id === 'go-to-register') {
-                e.preventDefault();
-                state.view = 'register';
-                renderApp();
-                return;
-            } else if (link.id === 'go-to-login') {
-                e.preventDefault();
-                state.view = 'login';
-                renderApp();
                 return;
             }
         }
@@ -353,6 +248,7 @@ export function addEventListeners() {
             showModal({ title: '确认删除', message: `确定要删除此点位吗？`, isDanger: true, showCancel: true, confirmText: '删除',
                 onConfirm: async () => {
                     const { error } = await supabase.from('quote_markups').delete().eq('id', id);
+                    state.showCustomModal = false;
                     if (error) { showModal({ title: '删除失败', message: error.message }); }
                     else {
                         state.priceData.markupPoints = state.priceData.markupPoints.filter(p => p.id !== parseInt(id));
@@ -366,6 +262,7 @@ export function addEventListeners() {
             showModal({ title: '确认删除', message: `确定要删除此折扣阶梯吗？`, isDanger: true, showCancel: true, confirmText: '删除',
                 onConfirm: async () => {
                     const { error } = await supabase.from('quote_discounts').delete().eq('id', id);
+                    state.showCustomModal = false;
                     if (error) { showModal({ title: '删除失败', message: error.message }); }
                     else {
                         state.priceData.tieredDiscounts = state.priceData.tieredDiscounts.filter(t => t.id !== parseInt(id));
@@ -376,6 +273,59 @@ export function addEventListeners() {
         } else if (button.id === 'user-management-btn') {
             state.view = 'userManagement';
             needsRender = true;
+        } else if (button.id === 'add-new-user-btn') {
+            showModal({
+                title: '添加新用户',
+                message: `
+                    <div class="auth-input-group">
+                        <label for="new-username">用户名</label>
+                        <input type="text" id="new-username" required autocomplete="off" class="modal-input">
+                    </div>
+                    <div class="auth-input-group">
+                        <label for="new-password">初始密码</label>
+                        <input type="password" id="new-password" required autocomplete="new-password" class="modal-input">
+                        <p class="password-hint">密码至少需要6位字符。</p>
+                    </div>
+                `,
+                confirmText: '确认添加',
+                showCancel: true,
+                onConfirm: async () => {
+                    const newUsername = ($('#new-username') as HTMLInputElement)?.value;
+                    const newPassword = ($('#new-password') as HTMLInputElement)?.value;
+
+                    if (!newUsername || !newPassword || newPassword.length < 6) {
+                        state.customModal.errorMessage = '请输入有效的用户名和至少6位的密码。';
+                        renderApp(); // Re-render modal with error
+                        return;
+                    }
+                    
+                    // Optimistically clear error and show loading on button
+                    const confirmButton = $('#custom-modal-confirm-btn') as HTMLButtonElement;
+                    confirmButton.disabled = true;
+                    confirmButton.innerHTML = `<span class="spinner"></span> 正在添加`;
+                    state.customModal.errorMessage = '';
+                    renderApp();
+
+
+                    // Assumes an RPC function 'create_new_user' exists on the backend.
+                    // This is the secure way to create users as an admin without logging out.
+                    const { data, error } = await supabase.rpc('create_new_user', {
+                        full_name: newUsername,
+                        password: newPassword,
+                    });
+
+                    if (error) {
+                        state.customModal.errorMessage = `创建失败: ${error.message}`;
+                        confirmButton.disabled = false;
+                        confirmButton.innerHTML = '确认添加';
+                        renderApp();
+                    } else {
+                        state.profiles.push(data);
+                        state.showCustomModal = false;
+                        renderApp();
+                    }
+                }
+            });
         } else if (button.id === 'login-log-btn') {
             state.view = 'loginLog';
             const { data, error } = await supabase.from('login_logs').select('*').order('login_at', { ascending: false }).limit(100);
@@ -444,6 +394,7 @@ export function addEventListeners() {
                 confirmText: '确认删除',
                 onConfirm: async () => {
                     const { error } = await supabase.rpc('delete_user', { user_id: userId });
+                    state.showCustomModal = false;
                     if (error) {
                         showModal({ title: '删除失败', message: error.message });
                     } else {
@@ -460,6 +411,7 @@ export function addEventListeners() {
                 title: '确认删除', message: `确定要删除 "${category} - ${model}" 吗？`, showCancel: true, isDanger: true, confirmText: '删除',
                 onConfirm: async () => {
                      const { error } = await supabase.from('quote_items').delete().match({ category, model });
+                     state.showCustomModal = false;
                      if(error) { showModal({ title: '删除失败', message: error.message }); } 
                      else {
                         if (state.priceData.prices[category]) delete state.priceData.prices[category][model];

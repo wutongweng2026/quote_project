@@ -15,8 +15,6 @@ export function renderApp() {
         html = `<div class="app-status-container"><h2>出现错误</h2><div class="error-details">${state.errorMessage}</div></div>`;
     } else if (state.view === 'login') {
         html = renderLoginView();
-    } else if (state.view === 'register') {
-        html = renderRegisterView();
     } else if (!state.currentUser) {
         html = renderLoginView(); // Fallback to login if no user
     } else if (state.view === 'quote') {
@@ -54,40 +52,10 @@ function renderLoginView() {
                     </div>
                     <button type="submit" class="auth-button">登录</button>
                 </form>
-                <div class="auth-toggle">
-                    没有账户？ <a href="#" id="go-to-register">注册新账户</a>
-                </div>
             </div>
         </div>
     `;
 }
-
-function renderRegisterView() {
-    return `
-        <div class="auth-container">
-            <div class="auth-box">
-                <h1>注册新账户</h1>
-                <div id="register-error" class="auth-error" style="display: none;"></div>
-                <form id="register-form">
-                    <div class="auth-input-group">
-                        <label for="reg-username">用户名</label>
-                        <input type="text" id="reg-username" name="username" required autocomplete="username">
-                    </div>
-                    <div class="auth-input-group">
-                        <label for="reg-password">密码</label>
-                        <input type="password" id="reg-password" name="password" required autocomplete="new-password">
-                        <p class="password-hint">密码至少需要6位字符。</p>
-                    </div>
-                    <button type="submit" class="auth-button">注册</button>
-                </form>
-                <div class="auth-toggle">
-                    已有账户？ <a href="#" id="go-to-login">返回登录</a>
-                </div>
-            </div>
-        </div>
-    `;
-}
-
 
 function renderCustomModal() {
     if (!state.showCustomModal) return '';
@@ -96,7 +64,7 @@ function renderCustomModal() {
         <div class="modal-overlay" id="custom-modal-overlay">
             <div class="modal-content">
                 <h2>${title}</h2>
-                <p>${message}</p>
+                <div style="text-align: left; margin-bottom: 1.5rem;">${message}</div>
                 ${inputType ? `<input type="${inputType}" id="modal-input" class="modal-input" autofocus />` : ''}
                 <div class="modal-error">${errorMessage || ''}</div>
                 <div class="modal-buttons">
@@ -376,7 +344,10 @@ function renderUserManagementPanel() {
     <div class="adminContainer">
         <header class="adminHeader">
             <h2>用户账户管理</h2>
-            <div class="header-actions-admin"> <button id="back-to-quote-btn" class="admin-button">返回报价首页</button> </div>
+            <div class="header-actions-admin">
+                <button id="add-new-user-btn" class="admin-button" style="background-color: var(--secondary-color);">添加新用户</button>
+                <button id="back-to-quote-btn" class="admin-button">返回报价首页</button>
+            </div>
         </header>
         <div class="admin-content">
             <div class="admin-section">

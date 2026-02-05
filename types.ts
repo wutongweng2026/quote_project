@@ -47,7 +47,7 @@ export interface AppState {
     errorMessage: string | null;
     priceData: PriceData;
     profiles: DbProfile[];
-    view: 'login' | 'register' | 'quote' | 'admin' | 'userManagement' | 'loginLog';
+    view: 'login' | 'quote' | 'admin' | 'userManagement' | 'loginLog';
     currentUser: CurrentUser | null;
     selection: SelectionState;
     customItems: CustomItem[];
