@@ -129,9 +129,6 @@ supabase.auth.onAuthStateChange(async (event, session) => {
                 return;
             }
 
-            state.appStatus = 'loading';
-            renderApp();
-
             const loadedSuccessfully = await loadAllData(); 
 
             if (loadedSuccessfully) {
@@ -144,10 +141,14 @@ supabase.auth.onAuthStateChange(async (event, session) => {
                 }
                 state.view = 'quote';
                 
-                // Insert a record into the login log
-                await supabase.from('login_logs').insert({
+                // Insert a record into the login log without blocking the UI
+                supabase.from('login_logs').insert({
                     user_id: profile.id,
                     user_name: profile.full_name
+                }).then(({ error }) => {
+                    if (error) {
+                        console.error("Login logging failed:", error);
+                    }
                 });
             }
         } else {
