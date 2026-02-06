@@ -2,6 +2,7 @@ import { supabase, state } from './state';
 import { renderApp, showModal } from './ui';
 import { seedDataObject } from './seedData';
 import type { DbProfile, Prices, DbQuoteItem } from './types';
+import type { Session } from '@supabase/supabase-js';
 
 const CACHE_KEY = 'qqs_price_data_cache_v1';
 
@@ -149,7 +150,7 @@ async function checkAndFixDbSchema() {
 }
 
 
-async function handleUserSession(session) {
+async function handleUserSession(session: Session | null) {
     if (!session?.user) {
         state.currentUser = null;
         state.view = 'login';
@@ -160,6 +161,8 @@ async function handleUserSession(session) {
 
     // Prevent re-fetching data if user is already logged in and data is present
     if (state.currentUser?.id === session.user.id && state.priceData.items.length > 0) {
+        state.appStatus = 'ready';
+        renderApp();
         return;
     }
     
