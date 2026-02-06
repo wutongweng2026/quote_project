@@ -26,7 +26,7 @@ export function calculateTotals() {
 
     if (state.selectedDiscountId !== 'none') {
         // Manual Selection
-        const selectedTier = state.priceData.tieredDiscounts.find(t => t.id === state.selectedDiscountId);
+        const selectedTier = state.priceData.tieredDiscounts?.find(t => t.id === state.selectedDiscountId);
         if (selectedTier) {
             appliedRate = selectedTier.rate / 10;
             appliedDiscountLabel = selectedTier.threshold > 0 
@@ -35,7 +35,7 @@ export function calculateTotals() {
         }
     }
 
-    const selectedMarkupPoint = state.priceData.markupPoints.find(p => p.id === state.markupPoints);
+    const selectedMarkupPoint = state.priceData.markupPoints?.find(p => p.id === state.markupPoints);
     const markupValue = selectedMarkupPoint ? selectedMarkupPoint.value : 0;
     const priceBeforeDiscount = costTotal * (1 + markupValue / 100);
     let finalPrice = priceBeforeDiscount * appliedRate - state.specialDiscount;

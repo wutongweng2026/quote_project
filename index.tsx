@@ -1,4 +1,3 @@
-
 import { supabase, state } from './state';
 import { renderApp, showModal } from './ui';
 import { seedDataObject } from './seedData';
@@ -62,8 +61,8 @@ async function loadAllData(): Promise<boolean> {
                 Object.assign(state.priceData, {
                     items: cache.items,
                     prices: cache.prices,
-                    tieredDiscounts: cache.discounts,
-                    markupPoints: cache.markups
+                    tieredDiscounts: cache.tieredDiscounts,
+                    markupPoints: cache.markupPoints
                 });
                 state.lastUpdated = cache.timestamp;
                 return true;
