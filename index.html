@@ -130,16 +130,16 @@
         .data-table th, .data-table td { padding: 0.8rem 1rem; border-bottom: 1px solid var(--border-color); text-align: left; vertical-align: middle; }
         
         /* Custom alignments for quote table */
-        .data-table td:nth-child(1),    /* 配置清单 content */
-        .data-table th:nth-child(3),    /* 数量 header */
-        .data-table th:nth-child(4),    /* 操作 header */
-        .data-table td:nth-child(4) {   /* 操作 content */
+        .data-table th:nth-child(1),                                    /* 配置清单 header */
+        .data-table tbody tr:not(#add-category-row) td:nth-child(1), /* 配置清单 content (excluding add row) */
+        .data-table th:nth-child(3),                                    /* 数量 header */
+        .data-table th:nth-child(4),                                    /* 操作 header */
+        .data-table td:nth-child(4) {                                   /* 操作 content */
             text-align: center;
         }
         .data-table td:nth-child(3) .form-input { /* 数量 input text */
             text-align: center;
-            padding-left: 0.5rem;
-            padding-right: 0.5rem;
+            padding: 0.5rem; /* Reduced padding to ensure arrows are visible */
         }
 
         .data-table thead { background-color: var(--background-color); }

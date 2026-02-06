@@ -103,7 +103,7 @@ function renderQuoteTool() {
     return `
        <div class="app-layout">
            <header class="app-header">
-               <h1>产品报价系统 <span>--龙盛科技</span></h1>
+               <h1>产品报价系统 v2 <span>--龙盛科技</span></h1>
                 <div class="header-actions">
                    <span class="update-timestamp">数据更新于: ${lastUpdatedDate}</span>
                     ${isAdmin ? '<button class="header-btn" id="login-log-btn">登录日志</button>' : ''}
