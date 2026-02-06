@@ -3,37 +3,51 @@ import { state } from './state';
 import { calculateTotals, getFinalConfigText } from './calculations';
 import type { CustomItem, CustomModalState, AppState } from './types';
 import { CONFIG_ROWS } from './config';
+import { attachLoginListeners, attachQuoteToolListeners, attachAdminPanelListeners, attachUserManagementListeners, attachLoginLogListeners, attachModalListeners } from './logic';
 
 const appContainer = document.querySelector('#app')!;
 const $ = (selector: string) => document.querySelector(selector);
 
 // --- RENDER FUNCTIONS ---
 export function renderApp() {
-    let html = '';
+    let viewHtml = '';
+    let attachListeners: (() => void) | null = null;
+
     if (state.appStatus === 'loading') {
-        html = `<div class="app-status-container"><div class="loading-spinner"></div><h2>正在加载...</h2></div>`;
+        viewHtml = `<div class="app-status-container"><div class="loading-spinner"></div><h2 style="margin-top: 1.5rem; color: #64748b;">正在加载...</h2></div>`;
     } else if (state.appStatus === 'error') {
-        html = `<div class="app-status-container"><h2>出现错误</h2><div class="error-details">${state.errorMessage}</div></div>`;
-    } else if (state.view === 'login') {
-        html = renderLoginView();
-    } else if (!state.currentUser) {
-        html = renderLoginView(); // Fallback to login if no user
+        viewHtml = `<div class="app-status-container"><h2>出现错误</h2><div class="error-details">${state.errorMessage}</div></div>`;
+    } else if (state.view === 'login' || !state.currentUser) {
+        viewHtml = renderLoginView();
+        attachListeners = attachLoginListeners;
     } else if (state.view === 'quote') {
-        html = renderQuoteTool();
+        viewHtml = renderQuoteTool();
+        attachListeners = attachQuoteToolListeners;
     } else if (state.view === 'admin' && (state.currentUser.role === 'admin' || state.currentUser.role === 'manager')) {
-        html = renderAdminPanel();
+        viewHtml = renderAdminPanel();
+        attachListeners = attachAdminPanelListeners;
     } else if (state.view === 'userManagement' && state.currentUser.role === 'admin') {
-        html = renderUserManagementPanel();
+        viewHtml = renderUserManagementPanel();
+        attachListeners = attachUserManagementListeners;
     } else if (state.view === 'loginLog' && state.currentUser.role === 'admin') {
-        html = renderLoginLogPanel();
+        viewHtml = renderLoginLogPanel();
+        attachListeners = attachLoginLogListeners;
     } else {
-        html = renderQuoteTool();
+        viewHtml = renderQuoteTool();
+        attachListeners = attachQuoteToolListeners;
     }
 
-    if (state.showCustomModal) {
-        html += renderCustomModal();
+    const modalHtml = state.showCustomModal ? renderCustomModal() : '';
+    appContainer.innerHTML = viewHtml + modalHtml;
+    
+    // Attach listeners for the main view
+    if (attachListeners) {
+        attachListeners();
     }
-    appContainer.innerHTML = html;
+    // Attach listeners for the modal if it's visible
+    if (state.showCustomModal) {
+        attachModalListeners();
+    }
 }
 
 function renderLoginView() {
@@ -59,14 +73,12 @@ function renderLoginView() {
 }
 
 function renderCustomModal() {
-    if (!state.showCustomModal) return '';
     const { title, message, confirmText, cancelText, showCancel, isDanger, inputType, errorMessage } = state.customModal;
     return `
        <div class="modal-overlay" id="custom-modal-overlay">
            <div class="modal-content">
                <h2>${title}</h2>
-               <div style="text-align: left; margin-bottom: 1.5rem;">${message}</div>
-               ${inputType ? `<input type="${inputType}" id="modal-input" class="modal-input" autofocus />` : ''}
+               <div>${message}</div>
                <div class="modal-error">${errorMessage || ''}</div>
                <div class="modal-buttons">
                    ${showCancel ? `<button class="modal-cancel-btn" id="custom-modal-cancel-btn">${cancelText}</button>` : ''}
@@ -82,7 +94,6 @@ function renderQuoteTool() {
     const finalConfigText = getFinalConfigText();
     const lastUpdatedDate = state.lastUpdated ? new Date(state.lastUpdated).toLocaleString('zh-CN', { dateStyle: 'short', timeStyle: 'short' }) : '暂无记录';
 
-    // Visibility logic for the final price
     const finalPriceVisibility = state.showFinalQuote ? 'visible' : 'hidden';
     const finalPriceOpacity = state.showFinalQuote ? '1' : '0';
 
@@ -95,32 +106,32 @@ function renderQuoteTool() {
                <h1>产品报价系统 <span>v2.1 - 龙盛科技</span></h1>
                 <div class="header-actions">
                    <span class="update-timestamp">数据更新于: ${lastUpdatedDate}</span>
-                    ${isAdmin ? '<button class="admin-button" id="login-log-btn">登录日志</button>' : ''}
-                    ${isAdmin ? '<button class="admin-button" id="user-management-btn">用户管理</button>' : ''}
-                    ${(isAdmin || isManager) ? '<button class="admin-button" id="app-view-toggle-btn">后台管理</button>' : ''}
-                   <button class="admin-button" id="logout-btn">退出</button>
+                    ${isAdmin ? '<button class="header-btn" id="login-log-btn">登录日志</button>' : ''}
+                    ${isAdmin ? '<button class="header-btn" id="user-management-btn">用户管理</button>' : ''}
+                    ${(isAdmin || isManager) ? '<button class="header-btn" id="app-view-toggle-btn">后台管理</button>' : ''}
+                   <button class="header-btn" id="logout-btn">退出</button>
                </div>
            </header>
            <main class="quoteBody">
                <div class="product-matcher-section">
                    <label for="matcher-input" style="font-size: 1.1rem; color: var(--primary-color-hover);">💡 智能配置推荐:</label>
                    <div class="matcher-input-group">
-                       <input type="text" id="matcher-input" placeholder="在此输入需求，例如：“推荐一款8000元左右的电脑” “i5/8G/5060显卡”" style="padding: 0.8rem; border-radius: 6px; border: 1px solid var(--border-color); font-family: inherit; width: 100%; font-size: 1rem;">
-                       <button id="match-config-btn" style="height: auto; white-space: nowrap;">智能生成<br>配置方案</button>
+                       <input type="text" id="matcher-input" placeholder="在此输入需求，例如：“推荐一款8000元左右的电脑” “i5/8G/5060显卡”">
+                       <button id="match-config-btn" class="btn btn-primary">智能生成<br>配置方案</button>
                    </div>
                </div>
                <table class="config-table">
                    <colgroup> <col style="width: 200px;"> <col> <col style="width: 80px;"> <col style="width: 60px;"> </colgroup>
                    <thead> <tr> <th>配置清单</th> <th>规格型号</th> <th>数量</th> <th>操作</th> </tr> </thead>
                    <tbody>
-                       ${CONFIG_ROWS.map(category => renderConfigRow(category)).join('')}
-                       ${state.customItems.map(item => renderCustomItemRow(item)).join('')}
+                       ${CONFIG_ROWS.map(renderConfigRow).join('')}
+                       ${state.customItems.map(renderCustomItemRow).join('')}
                        ${renderAddCategoryRow()}
                    </tbody>
                </table>
-               <div class="final-config-section">
-                   <label>最终配置:</label>
-                   <textarea class="final-config-display" readonly>${finalConfigText || '未选择配件'}</textarea>
+                <div class="final-config-section">
+                   <label for="final-config-display">最终配置:</label>
+                   <textarea id="final-config-display" class="final-config-display" readonly>${finalConfigText || '未选择配件'}</textarea>
                </div>
                <div class="controls-grid">
                    <div class="control-group">
@@ -152,9 +163,9 @@ function renderQuoteTool() {
                    <strong>¥ ${totals.finalPrice.toFixed(2)}</strong>
                </div>
                <div class="footer-buttons">
-                   <button class="reset-btn" id="reset-btn">重置</button>
-                   <button id="generate-quote-btn" style="background-color: var(--secondary-color);">导出报价</button>
-                   <button id="calc-quote-btn" style="background-color: var(--primary-color);">生成报价</button>
+                   <button class="btn btn-danger" id="reset-btn">重置</button>
+                   <button class="btn btn-secondary" id="generate-quote-btn">导出报价</button>
+                   <button class="btn btn-primary" id="calc-quote-btn">生成报价</button>
                </div>
            </footer>
        </div>
@@ -203,7 +214,7 @@ function renderAddCategoryRow() {
            <td class="config-row-label">添加新类别</td>
            <td> <input type="text" id="new-category-input" placeholder="在此输入类别名称 (例如: 配件)" value="${state.newCategory}" /> </td>
            <td></td>
-           <td class="config-row-action"> <button id="add-category-btn" style="background-color: var(--primary-color);">+</button> </td>
+           <td class="config-row-action"> <button id="add-category-btn">+</button> </td>
        </tr>
    `;
 }
@@ -211,7 +222,6 @@ function renderAddCategoryRow() {
 export function renderAdminDataTableBody() {
     const searchTerm = (state.adminSearchTerm || '').toLowerCase();
     
-    // Sort items by category then model for display
     const filteredItems = state.priceData.items.filter(item =>
         item.category.toLowerCase().includes(searchTerm) ||
         item.model.toLowerCase().includes(searchTerm)
@@ -233,82 +243,74 @@ export function renderAdminDataTableBody() {
                 <input type="checkbox" class="priority-checkbox" ${item.is_priority ? 'checked' : ''} title="勾选后，智能推荐将优先选择此配件">
             </td>
             <td>
-                <button class="admin-save-item-btn">保存</button>
-                <button class="admin-delete-item-btn" data-category="${item.category}" data-model="${item.model}">删除</button>
+                <button class="btn btn-primary admin-save-item-btn">保存</button>
+                <button class="btn btn-danger admin-delete-item-btn" data-category="${item.category}" data-model="${item.model}">删除</button>
             </td>
         </tr>`
     ).join('');
 }
 
 function renderAdminPanel() {
-    const syncStatusMessages = {
-        idle: '',
-        saving: '正在保存...',
-        saved: '已同步 ✓',
-        error: '保存出错!'
-    };
-
     return `
    <div class="adminContainer">
        <header class="adminHeader">
            <h2>系统管理后台</h2>
-           <div class="header-actions-admin">
-               <div id="sync-status" class="${state.syncStatus}">${syncStatusMessages[state.syncStatus]}</div>
-               <button id="back-to-quote-btn" class="admin-button">返回报价首页</button>
+           <div class="header-actions">
+               <button id="back-to-quote-btn" class="header-btn">返回报价首页</button>
            </div>
        </header>
-       <div class="admin-content">
+       <div class="admin-content" style="padding: 2rem;">
            <div class="admin-section">
-               <h3 class="admin-section-header">点位管理</h3>
+               <div class="admin-section-header">点位管理</div>
                <div class="admin-section-body">
-                    <p style="color: var(--secondary-text-color); font-size: 0.9rem; margin-top: 0;">修改后将自动保存。</p>
+                    <p>修改后将自动保存。</p>
                    <div id="markup-points-list">
                        ${state.priceData.markupPoints.sort((a, b) => a.value - b.value).map(point => `
                            <div class="markup-point-row" data-id="${point.id}">
                                <input type="text" class="markup-alias-input" value="${point.alias}" placeholder="别名">
                                <input type="number" class="markup-value-input" value="${point.value}" placeholder="点数">
                                <span>点</span>
-                               <button class="remove-markup-point-btn" data-id="${point.id}">删除</button>
+                               <button class="btn btn-danger remove-markup-point-btn" data-id="${point.id}">删除</button>
                            </div>
                        `).join('')}
                    </div>
-                    <div class="markup-point-row" style="margin-top: 1rem;"> <button id="add-markup-point-btn" class="add-new-btn">添加新点位</button> </div>
+                    <div id="add-markup-point-btn" class="add-new-placeholder" style="margin-top: 1rem;">+ 添加新点位</div>
                </div>
            </div>
            <div class="admin-section">
-               <h3 class="admin-section-header">折扣阶梯管理</h3>
+               <div class="admin-section-header">折扣阶梯管理</div>
                <div class="admin-section-body">
-                   <p style="color: var(--secondary-text-color); font-size: 0.9rem; margin-top: 0;">修改后将自动保存。</p>
+                   <p>修改后将自动保存。</p>
                    <div id="tiered-discount-list">
                        ${state.priceData.tieredDiscounts.sort((a, b) => a.threshold - b.threshold).map(tier => `
                            <div class="tier-row" data-id="${tier.id}">
                                <span>满</span> <input type="number" class="tier-threshold-input" value="${tier.threshold}" placeholder="数量">
                                <span>件, 打</span> <input type="number" step="0.1" class="tier-rate-input" value="${tier.rate}" placeholder="折扣率">
-                               <span>折</span> <button class="remove-tier-btn" data-id="${tier.id}">删除</button>
+                               <span>折</span> <button class="btn btn-danger remove-tier-btn" data-id="${tier.id}">删除</button>
                            </div>
                        `).join('')}
                    </div>
-                    <div class="tier-row" style="margin-top: 1rem;"> <button id="add-tier-btn" class="add-new-btn">添加新折扣阶梯</button> </div>
+                    <div id="add-tier-btn" class="add-new-placeholder" style="margin-top: 1rem;">+ 添加新折扣阶梯</div>
                </div>
            </div>
            <div class="admin-section">
-               <h3 class="admin-section-header">快速录入配件</h3>
+                <div class="admin-section-header">快速录入配件</div>
                <div class="admin-section-body">
                    <form id="quick-add-form" class="quick-add-form">
                         <input type="text" id="quick-add-category-input" placeholder="分类" />
                         <input type="text" id="quick-add-model" placeholder="型号名称" />
                         <input type="number" id="quick-add-price" placeholder="成本单价" />
-                        <button type="submit" id="quick-add-btn">确认添加/更新</button>
+                        <button type="submit" id="quick-add-btn" class="btn btn-secondary">确认添加/更新</button>
                    </form>
                    <div class="import-section">
                        <input type="file" id="import-file-input" accept=".xlsx, .xls" style="display: none;" />
-                       <button id="import-excel-btn">从Excel导入</button>
+                       <button id="import-excel-btn" class="btn btn-secondary">从Excel导入</button>
                        <span id="file-name-display"></span>
                    </div>
                </div>
            </div>
            <div class="admin-section">
-               <h3 class="admin-section-header">现有数据维护</h3>
+               <div class="admin-section-header">现有数据维护</div>
                <div class="admin-section-body">
                    <input type="search" id="admin-search-input" placeholder="输入型号或分类名称搜索..." value="${state.adminSearchTerm}" />
                    <div id="admin-data-table-container" style="max-height: 400px; overflow-y: auto;">
@@ -318,7 +320,7 @@ function renderAdminPanel() {
                                     <th>分类</th>
                                     <th>型号</th>
                                     <th>单价</th>
-                                    <th style="text-align: center; color: #ef4444;">优先推荐</th>
+                                    <th style="text-align: center;">优先推荐</th>
                                     <th>操作</th>
                                 </tr>
                             </thead>
@@ -339,8 +341,8 @@ function renderLoginLogPanel() {
    <div class="adminContainer">
        <header class="adminHeader">
            <h2>登录日志 (最近100条)</h2>
-           <div class="header-actions-admin">
-               <button id="back-to-quote-btn" class="admin-button">返回报价首页</button>
+           <div class="header-actions">
+               <button id="back-to-quote-btn" class="header-btn">返回报价首页</button>
            </div>
        </header>
        <div class="admin-content">
@@ -371,76 +373,75 @@ function renderLoginLogPanel() {
 
 function renderUserManagementPanel() {
     return `
-   <div class="adminContainer">
-       <header class="adminHeader">
+   <div class="user-management-container">
+       <header class="user-management-header">
            <h2>用户账户管理</h2>
-           <div class="header-actions-admin">
-               <button id="add-new-user-btn" class="admin-button" style="background-color: var(--secondary-color);">添加新用户</button>
-               <button id="back-to-quote-btn" class="admin-button">返回报价首页</button>
+           <div class="header-actions">
+               <button id="add-new-user-btn" class="btn btn-secondary">添加新用户</button>
+               <button id="back-to-quote-btn" class="btn btn-primary">返回报价首页</button>
            </div>
        </header>
-       <div class="admin-content">
-           <div class="admin-section">
-                <div class="admin-section-body">
-                   <table class="admin-data-table">
-                       <thead>
-                           <tr>
-                               <th>用户名</th>
-                               <th>角色</th>
-                               <th>状态</th>
-                               <th style="text-align: right;">操作</th>
-                           </tr>
-                       </thead>
-                       <tbody>
-                            ${state.profiles.map(profile => {
-                                let roleBadge = '';
-                                if (profile.role === 'admin') {
-                                    roleBadge = `<span class="status-badge" style="background-color: #bfdbfe; color: #1e40af;">管理员</span>`;
-                                } else if (profile.role === 'manager') {
-                                    roleBadge = `<span class="status-badge" style="background-color: #e9d5ff; color: #6b21a8;">后台管理</span>`;
-                                } else {
-                                    roleBadge = `<span class="status-badge" style="background-color: #e0e7ff; color: #3730a3;">销售</span>`;
-                                }
+       <div class="user-table-card">
+           <table class="user-table">
+               <thead>
+                   <tr>
+                       <th>用户名</th>
+                       <th>角色</th>
+                       <th>状态</th>
+                       <th>操作</th>
+                   </tr>
+               </thead>
+               <tbody>
+                    ${state.profiles.map(profile => {
+                        let roleBadgeHtml = '';
+                        switch(profile.role) {
+                            case 'admin':
+                                roleBadgeHtml = `<span class="role-badge role-badge-admin">管理员</span>`;
+                                break;
+                            case 'manager':
+                                roleBadgeHtml = `<span class="role-badge role-badge-manager">后台管理</span>`;
+                                break;
+                            default:
+                                roleBadgeHtml = `<span>销售</span>`;
+                        }
 
-                                const isCurrentUser = profile.id === state.currentUser?.id;
-                                const isTargetAdminOrManager = profile.role === 'admin' || profile.role === 'manager';
+                        const statusBadgeHtml = profile.is_approved
+                            ? `<span class="status-badge status-badge-approved">已批准</span>`
+                            : `<span class="status-badge status-badge-pending">待审批</span>`;
+                        
+                        const isCurrentUser = profile.id === state.currentUser?.id;
+                        let actionsHtml = '';
+                        if (isCurrentUser) {
+                            actionsHtml = '<span style="color: var(--secondary-text-color); font-style: italic;">(当前用户)</span>';
+                        } else {
+                            const approveButton = !profile.is_approved ? `<button class="btn btn-primary approve-user-btn">批准</button>` : '';
+                            const permissionButton = profile.role === 'manager'
+                                ? `<button class="btn btn-secondary permission-toggle-btn" data-action="revoke">撤销后台权限</button>`
+                                : `<button class="btn btn-secondary permission-toggle-btn" data-action="grant">授予后台权限</button>`;
+                            const deleteButton = `<button class="btn btn-danger delete-user-btn">删除</button>`;
+                            
+                            const finalPermissionButton = profile.role !== 'admin' ? permissionButton : '';
 
-                                return `
-                               <tr data-user-id="${profile.id}">
-                                   <td>${profile.full_name || `无名氏 (${profile.id.substring(0, 6)})`}</td>
-                                   <td>${roleBadge}</td>
-                                   <td>
-                                       <span class="status-badge ${profile.is_approved ? 'approved' : 'pending'}">
-                                           ${profile.is_approved ? '已批准' : '待审批'}
-                                       </span>
-                                   </td>
-                                   <td class="user-actions">
-                                       ${!profile.is_approved ? `<button class="approve-user-btn">批准</button>` : ''}
-                                       ${!isCurrentUser 
-                                           ? `
-                                                ${isTargetAdminOrManager
-                                                   ? `<button class="permission-toggle-btn" data-action="revoke">撤销后台权限</button>`
-                                                   : `<button class="permission-toggle-btn" data-action="grant">授予后台权限</button>`
-                                               }
-                                               <button class="delete-user-btn">删除</button>
-                                           ` 
-                                           : '<span style="color: var(--secondary-text-color); font-style: italic;">(当前用户)</span>'
-                                       }
-                                   </td>
-                                </tr>`;
-                            }).join('')}
-                       </tbody>
-                   </table>
-               </div>
-           </div>
+                            actionsHtml = [approveButton, finalPermissionButton, deleteButton].filter(Boolean).join('');
+                        }
+
+                        return `
+                        <tr data-user-id="${profile.id}" data-user-role="${profile.role}">
+                            <td>${profile.full_name || '未命名'}</td>
+                            <td>${roleBadgeHtml}</td>
+                            <td>${statusBadgeHtml}</td>
+                            <td class="user-actions">${actionsHtml}</td>
+                        </tr>`;
+                    }).join('')}
+                    ${state.profiles.length === 0 ? '<tr><td colspan="4" style="text-align: center;">没有用户。</td></tr>' : ''}
+               </tbody>
+           </table>
        </div>
    </div>
    `;
 }
 
-// --- UI HELPERS ---
 export function showModal(options: Partial<CustomModalState>) {
-    // Establish a default action for the confirm button, which is to close the modal.
     const defaultOnConfirm = () => {
         state.showCustomModal = false;
         renderApp();
@@ -448,11 +449,11 @@ export function showModal(options: Partial<CustomModalState>) {
 
     state.customModal = {
         title: '提示', message: '',
-        onConfirm: defaultOnConfirm, // Start with the default
+        onConfirm: defaultOnConfirm,
         confirmText: '确定',
         cancelText: '取消', showCancel: false, isDanger: false, errorMessage: '',
         isDismissible: true,
-        ...options // If `options` contains an `onConfirm`, it will correctly override the default.
+        ...options
     };
     state.showCustomModal = true;
     renderApp();

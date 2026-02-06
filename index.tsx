@@ -24,7 +24,6 @@ async function seedDatabaseIfNeeded() {
 
         console.log("Database appears to be empty. Seeding initial data...");
 
-        // 1. Seed Prices (quote_items)
         const itemsToInsert = Object.entries(seedDataObject.prices)
             .flatMap(([category, models]) =>
                 Object.entries(models).map(([model, price]) => ({
@@ -36,20 +35,11 @@ async function seedDatabaseIfNeeded() {
             );
 
         const { error: itemsError } = await supabase.from('quote_items').insert(itemsToInsert);
-        if (itemsError) {
-            console.error("Error seeding quote_items:", itemsError);
-        } else {
-            console.log(`Seeded ${itemsToInsert.length} items successfully.`);
-        }
+        if (itemsError) console.error("Error seeding quote_items:", itemsError);
 
-        // 2. Seed Discounts (quote_discounts)
         const discountsToInsert = seedDataObject.tieredDiscounts;
         const { error: discountsError } = await supabase.from('quote_discounts').insert(discountsToInsert);
-        if (discountsError) {
-            console.error("Error seeding quote_discounts:", discountsError);
-        } else {
-            console.log(`Seeded ${discountsToInsert.length} discounts successfully.`);
-        }
+        if (discountsError) console.error("Error seeding quote_discounts:", discountsError);
     } catch (error) {
         console.error("An unexpected error occurred during the seeding process:", error);
     }
@@ -58,63 +48,44 @@ async function seedDatabaseIfNeeded() {
 
 async function loadAllData(): Promise<boolean> {
     try {
-        state.appStatus = 'loading';
-        renderApp();
-
-        // 1. Fetch the remote timestamp first (Fast metadata check)
-        const { data: metaData, error: metaError } = await supabase
+        const { data: metaData } = await supabase
             .from('quote_meta')
             .select('value')
             .eq('key', 'last_prices_updated')
             .maybeSingle();
 
         const remoteTimestamp = metaData?.value as string | null;
-
-        // 2. Check Local Cache
         const cachedStr = localStorage.getItem(CACHE_KEY);
         if (cachedStr && remoteTimestamp) {
-            try {
-                const cache = JSON.parse(cachedStr);
-                if (cache.timestamp === remoteTimestamp) {
-                    console.log('⚡ Using local price data cache...');
-                    state.priceData.items = cache.items;
-                    state.priceData.prices = cache.prices;
-                    state.priceData.tieredDiscounts = cache.discounts;
-                    state.priceData.markupPoints = cache.markups;
-                    state.lastUpdated = cache.timestamp;
-                    state.appStatus = 'ready';
-                    return true;
-                }
-            } catch (e) {
-                console.warn('Cache validation failed, clearing cache.');
-                localStorage.removeItem(CACHE_KEY);
+            const cache = JSON.parse(cachedStr);
+            if (cache.timestamp === remoteTimestamp) {
+                console.log('⚡ Using local price data cache...');
+                Object.assign(state.priceData, {
+                    items: cache.items,
+                    prices: cache.prices,
+                    tieredDiscounts: cache.discounts,
+                    markupPoints: cache.markups
+                });
+                state.lastUpdated = cache.timestamp;
+                return true;
             }
         }
 
-        // 3. Fallback: Fetch all data from database
         console.log('🌐 Fetching fresh data from database...');
-        const [
-            { data: itemsData, error: itemsError },
-            { data: discountsData, error: discountsError },
-            { data: markupsData, error: markupsError }
-        ] = await Promise.all([
+        const [{ data: itemsData, error: itemsError }, { data: discountsData, error: discountsError }, { data: markupsData, error: markupsError }] = await Promise.all([
             supabase.from('quote_items').select('*'),
             supabase.from('quote_discounts').select('*'),
             supabase.from('quote_markups').select('*')
         ]);
 
-        if (itemsError) throw itemsError;
-        if (discountsError) throw discountsError;
-        if (markupsError) throw markupsError;
+        if (itemsError || discountsError || markupsError) throw itemsError || discountsError || markupsError;
 
-        const pricesMap = (itemsData || []).reduce((acc, item) => {
+        state.priceData.items = (itemsData as DbQuoteItem[]) || [];
+        state.priceData.prices = (itemsData || []).reduce((acc, item) => {
             if (!acc[item.category]) acc[item.category] = {};
             acc[item.category][item.model] = item.price;
             return acc;
         }, {} as Prices);
-
-        state.priceData.items = (itemsData as DbQuoteItem[]) || [];
-        state.priceData.prices = pricesMap;
         state.priceData.tieredDiscounts = discountsData || [];
         state.priceData.markupPoints = markupsData || [];
         state.lastUpdated = remoteTimestamp;
@@ -123,101 +94,83 @@ async function loadAllData(): Promise<boolean> {
             state.markupPoints = state.priceData.markupPoints[0].id;
         }
 
-        try {
-            localStorage.setItem(CACHE_KEY, JSON.stringify({
-                items: state.priceData.items,
-                prices: state.priceData.prices,
-                discounts: state.priceData.tieredDiscounts,
-                markups: state.priceData.markupPoints,
-                timestamp: remoteTimestamp
-            }));
-        } catch (e) { }
-
-        state.appStatus = 'ready';
+        localStorage.setItem(CACHE_KEY, JSON.stringify({ ...state.priceData, timestamp: remoteTimestamp }));
         return true;
     } catch (error: any) {
-        console.error("LoadAllData Error:", error);
         state.appStatus = 'error';
-        state.errorMessage = `
-            <h3 style="color: #b91c1c; margin-top:0;">数据加载失败</h3>
-            <p>登录成功，但无法初始化报价数据。</p>
-            <p style="margin-top: 1rem;">原始错误: ${error.message}</p>`;
+        state.errorMessage = `<h3 style="color: #b91c1c;">数据加载失败</h3><p>无法初始化报价数据。</p><p>错误: ${error.message}</p>`;
         return false;
     }
 }
 
-supabase.auth.onAuthStateChange(async (event, session) => {
-    if (session?.user) {
-        if (state.view === 'login' || state.appStatus !== 'loading') {
-            state.appStatus = 'loading';
-            renderApp();
-        }
-
-        const { data: profile, error } = await supabase
-            .from('profiles')
-            .select('id, full_name, role, is_approved')
-            .eq('id', session.user.id)
-            .single();
-
-        if (error) {
-            console.error("Profile load error:", error);
-            state.currentUser = null;
-            state.appStatus = 'ready';
-            state.view = 'login';
-            renderApp();
-            return;
-        }
-
-        if (profile) {
-            if (!profile.is_approved && profile.role !== 'admin') {
-                state.appStatus = 'ready';
-                showModal({
-                    title: '账户待审批',
-                    message: '您的账户正在等待管理员批准，请稍后再试。',
-                    onConfirm: async () => {
-                        state.showCustomModal = false;
-                        await supabase.auth.signOut();
-                    }
-                });
-                return;
-            }
-
-            const loadedSuccessfully = await loadAllData();
-
-            if (loadedSuccessfully) {
-                state.currentUser = { ...profile, auth: session.user };
-                if (profile.role === 'admin') {
-                    const { data: allProfiles } = await supabase.from('profiles').select('*');
-                    state.profiles = allProfiles || [profile];
-                    if (state.priceData.items.length === 0) {
-                        await seedDatabaseIfNeeded();
-                        await loadAllData();
-                    }
-                } else {
-                    state.profiles = [profile];
-                }
-                state.view = 'quote';
-
-                supabase.from('login_logs').insert({
-                    user_id: profile.id,
-                    user_name: profile.full_name
-                }).then(({ error: logError }) => {
-                    if (logError) console.error("Login logging failed:", logError);
-                });
-            }
-        }
-    } else {
-        state.appStatus = 'ready';
+async function handleUserSession(session) {
+    if (!session?.user) {
         state.currentUser = null;
-        state.profiles = [];
         state.view = 'login';
+        state.appStatus = 'ready';
+        renderApp();
+        return;
     }
+
+    // Prevent re-fetching data if user is already logged in and data is present
+    if (state.currentUser?.id === session.user.id && state.priceData.items.length > 0) {
+        return;
+    }
+    
+    state.appStatus = 'loading';
     renderApp();
-});
+
+    const { data: profile, error } = await supabase.from('profiles').select('*').eq('id', session.user.id).single();
+
+    if (error || !profile) {
+        console.error("Profile load error:", error);
+        state.view = 'login';
+        state.appStatus = 'ready';
+        await supabase.auth.signOut(); // Log out corrupted session
+        return;
+    }
+
+    if (!profile.is_approved && profile.role !== 'admin') {
+        showModal({ title: '账户待审批', message: '您的账户正在等待管理员批准，请稍后再试。', onConfirm: () => supabase.auth.signOut() });
+        state.appStatus = 'ready';
+        renderApp();
+        return;
+    }
+
+    if (await loadAllData()) {
+        state.currentUser = { ...profile, auth: session.user };
+        state.view = 'quote';
+        if (profile.role === 'admin') {
+            const { data: allProfiles } = await supabase.from('profiles').select('*');
+            state.profiles = allProfiles || [profile];
+            if (state.priceData.items.length === 0) {
+                await seedDatabaseIfNeeded();
+                await loadAllData(); // Reload after seeding
+            }
+        } else {
+            state.profiles = [profile];
+        }
+        supabase.from('login_logs').insert({ user_id: profile.id, user_name: profile.full_name }).then();
+    }
+    state.appStatus = 'ready';
+    renderApp();
+}
 
 
-(async () => {
+async function initializeApp() {
     addEventListeners();
-    renderApp();
-    supabase.auth.getSession();
-})();
+    
+    // Listen for future auth changes (login/logout)
+    supabase.auth.onAuthStateChange(async (event, session) => {
+        // We only care about SIGNED_IN and SIGNED_OUT events to avoid redundant runs
+        if (event === 'SIGNED_IN' || event === 'SIGNED_OUT') {
+            await handleUserSession(session);
+        }
+    });
+
+    // Check the initial session state on page load
+    const { data: { session } } = await supabase.auth.getSession();
+    await handleUserSession(session);
+}
+
+initializeApp();
