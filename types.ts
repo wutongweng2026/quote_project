@@ -57,6 +57,7 @@ export interface AppState {
     priceData: PriceData;
     profiles: DbProfile[];
     view: 'login' | 'quote' | 'admin' | 'userManagement' | 'loginLog';
+    authMode: 'login' | 'register'; // Added for login/register toggle
     currentUser: CurrentUser | null;
     selection: SelectionState;
     customItems: CustomItem[];
@@ -72,4 +73,5 @@ export interface AppState {
     loginLogs: DbLoginLog[];
     showFinalQuote: boolean;
     selectedDiscountId: number | 'none';
+    isRestoringProfile: boolean; // 新增：防止注册恢复期间被强制登出
 }

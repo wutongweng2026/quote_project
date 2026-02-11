@@ -1,6 +1,10 @@
+
 import { state, supabase } from '../state';
 import { renderApp, showModal } from '../ui';
 const $ = (selector: string) => document.querySelector(selector);
+
+// 必须与 login.ts 保持一致
+const INTERNAL_EMAIL_SUFFIX = '@longsheng.local';
 
 export function attachUserManagementListeners() {
     $('#back-to-quote-btn')?.addEventListener('click', () => { state.view = 'quote'; renderApp(); });
@@ -18,91 +22,110 @@ export function attachUserManagementListeners() {
 
         if (button.id === 'add-new-user-btn') {
             showModal({
-                title: '添加新用户',
+                title: '添加内部员工',
                 message: `
                     <div class="auth-input-group">
-                        <label for="new-email">邮箱</label>
-                        <input type="email" id="new-email" class="form-input" required>
+                        <label for="new-username">用户名 (登录账号)</label>
+                        <input type="text" id="new-username" class="form-input" placeholder="例如: zhangsan" required>
+                        <small style="color: #666; display:block; margin-top:4px;">* 仅支持字母、数字或下划线</small>
                     </div>
                     <div class="auth-input-group">
-                        <label for="new-password">密码</label>
-                        <input type="password" id="new-password" class="form-input" required>
-                    </div>
-                     <div class="auth-input-group">
-                        <label for="new-fullname">用户名</label>
-                        <input type="text" id="new-fullname" class="form-input" required>
+                        <label for="new-fullname">员工姓名 (显示名称)</label>
+                        <input type="text" id="new-fullname" class="form-input" placeholder="例如: 张三" required>
                     </div>
                     <div class="auth-input-group">
-                        <label for="new-role">角色</label>
+                        <label for="new-password">初始密码</label>
+                        <input type="text" id="new-password" class="form-input" value="123456" required>
+                    </div>
+                    <div class="auth-input-group">
+                        <label for="new-role">角色权限</label>
                         <select id="new-role" class="form-select">
-                            <option value="sales">销售</option>
-                            <option value="manager">后台管理</option>
-                            <option value="admin">管理员</option>
+                            <option value="sales">销售人员 (仅报价)</option>
+                            <option value="manager">后台管理 (可改价)</option>
+                            <option value="admin">系统管理员 (完全控制)</option>
                         </select>
                     </div>
                 `,
                 showCancel: true,
-                confirmText: '创建',
+                confirmText: '创建账号',
                 onConfirm: async () => {
-                    const email = ($('#new-email') as HTMLInputElement).value;
-                    const password = ($('#new-password') as HTMLInputElement).value;
-                    const fullName = ($('#new-fullname') as HTMLInputElement).value;
+                    const username = ($('#new-username') as HTMLInputElement).value.trim();
+                    const password = ($('#new-password') as HTMLInputElement).value.trim();
+                    const fullName = ($('#new-fullname') as HTMLInputElement).value.trim();
                     const role = ($('#new-role') as HTMLSelectElement).value;
 
-                    if (!email || !password || !fullName) {
-                        state.customModal.errorMessage = "所有字段均为必填项。";
+                    if (!username || !password || !fullName) {
+                        state.customModal.errorMessage = "请填写所有必填项。";
                         return renderApp();
                     }
                     
-                    // 1. Get current admin session to restore it later
+                    // 简单的用户名校验
+                    if (!/^[a-zA-Z0-9_]+$/.test(username)) {
+                        state.customModal.errorMessage = "用户名只能包含字母、数字或下划线。";
+                        return renderApp();
+                    }
+
+                    // 1. 获取当前管理员会话，以便稍后恢复
                     const { data: { session: adminSession } } = await supabase.auth.getSession();
                     if (!adminSession) {
                         state.customModal.errorMessage = "无法获取当前管理员会话，请重新登录。";
                         return renderApp();
                     }
 
-                    // 2. Sign up the new user. This will temporarily change the session.
+                    // 自动生成内部邮箱
+                    const email = `${username}${INTERNAL_EMAIL_SUFFIX}`;
+
+                    // 2. 创建新用户 (这会临时切换当前会话)
                     const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
                         email,
                         password,
+                        options: {
+                            data: { full_name: fullName } // 可选：将全名也存在 auth metadata 中
+                        }
                     });
 
-                    // 3. IMPORTANT: Restore the admin session immediately, regardless of the outcome.
+                    // 3. 关键步骤：无论成功失败，立即恢复管理员会话
                     await supabase.auth.setSession(adminSession);
 
-                    // 4. Handle results of the signUp call
+                    // 4. 处理结果
                     if (signUpError) {
                         let message = `创建失败: ${signUpError.message}`;
-                        if (signUpError.message.includes('Signups not allowed')) {
-                            message = '创建失败: 项目设置禁止新用户注册。请在 Supabase 控制面板中允许用户注册。';
-                        } else if (signUpError.message.includes('User already registered')) {
-                            message = '创建失败: 该邮箱已被注册。';
+                        if (signUpError.message.includes('already registered')) {
+                            message = `创建失败: 用户名 "${username}" 已存在。`;
                         }
                         state.customModal.errorMessage = message;
                         return renderApp();
                     }
 
                     if (!signUpData.user) {
-                        state.customModal.errorMessage = "创建失败: 未能从 Supabase 返回用户信息。";
+                        state.customModal.errorMessage = "创建失败: 未能从 Supabase 获取新用户信息。";
                         return renderApp();
                     }
 
-                    // 5. With admin session restored, insert the profile for the new user.
-                    const { error: profileError } = await supabase.from('profiles').insert({
-                        id: signUpData.user.id, full_name: fullName, role, is_approved: true
-                    });
+                    // 5. 在 profiles 表中记录用户详情
+                    // 关键修复：使用 upsert 替代 insert，兼容数据库触发器
+                    const { error: profileError } = await supabase.from('profiles').upsert({
+                        id: signUpData.user.id,
+                        full_name: fullName, 
+                        role, 
+                        is_approved: true // 管理员创建的账号默认已批准
+                    }, { onConflict: 'id' });
 
-                    // If profile creation fails, we have an orphaned auth user. Inform the admin.
                     if (profileError) {
-                        state.customModal.errorMessage = `Auth 用户已创建，但 Profile 创建失败: ${profileError.message}。请在 Supabase 中手动删除用户 ${email} 并重试。`;
+                        state.customModal.errorMessage = `Auth账号已创建，但资料表写入失败: ${profileError.message}`;
                         return renderApp();
                     }
                     
-                    // 6. Success: Refresh the user list and close the modal
+                    // 6. 成功：刷新列表
                     const { data: allProfiles } = await supabase.from('profiles').select('*');
                     state.profiles = allProfiles || [];
                     state.showCustomModal = false;
-                    renderApp();
+                    
+                    showModal({
+                        title: '创建成功',
+                        message: `员工 <b>${fullName}</b> 的账号已创建。<br>登录名: <b>${username}</b><br>初始密码: <b>${password}</b>`,
+                        confirmText: '知道了'
+                    });
                 }
             });
         }
@@ -134,14 +157,27 @@ export function attachUserManagementListeners() {
                 showCancel: true, isDanger: true, confirmText: '确认删除',
                 onConfirm: async () => {
                     try {
-                        const { error: adminError } = await supabase.auth.admin.deleteUser(userId);
-                        if (adminError) throw adminError;
+                        // 客户端删除 Auth 用户需要 Service Role 权限，通常被 RLS 禁止。
+                        // 在纯前端模式下，我们通常只能“软删除”或者从 profiles 中删除，让 Auth 用户变成“孤魂野鬼”。
+                        // 但如果项目开启了 Delete User RPC，可以尝试调用。
+                        // 这里我们优先删除 profiles 数据，使用户无法登录系统逻辑。
                         
+                        const { error: profileError } = await supabase.from('profiles').delete().eq('id', userId);
+                        if (profileError) throw profileError;
+                        
+                        // 尝试删除 Auth 用户 (可能会失败，取决于 Supabase 设置，但 UI 上我们已经移除了该用户)
+                        // 注意：这里可能会报错，我们捕获它但不阻断流程，因为 Profile 没了用户就进不来了
+                        try {
+                           await supabase.auth.admin.deleteUser(userId);
+                        } catch (e) {
+                            console.warn("Auth delete failed (expected in client-side only mode):", e);
+                        }
+
                         state.profiles = state.profiles.filter(p => p.id !== userId);
                         state.showCustomModal = false;
                         renderApp();
                     } catch(err: any) {
-                        showModal({title: "删除失败", message: `该错误可能是因为当前用户没有权限删除其他用户。请检查Supabase RLS策略。错误详情: ${err.message}`, isDanger: true});
+                        showModal({title: "删除失败", message: `操作失败: ${err.message}`, isDanger: true});
                     }
                 }
             });

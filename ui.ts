@@ -51,21 +51,33 @@ export function renderApp() {
 }
 
 function renderLoginView() {
+    const isRegister = state.authMode === 'register';
     return `
        <div class="auth-container">
            <div class="auth-box">
-               <h1>产品报价系统登录</h1>
+               <h1>产品报价系统${isRegister ? '注册' : '登录'}</h1>
                <div id="login-error" class="auth-error" style="display: none;"></div>
                <form id="login-form">
                    <div class="auth-input-group">
                        <label for="username">用户名</label>
-                       <input type="text" id="username" name="username" class="form-input" required autocomplete="username">
+                       <input type="text" id="username" name="username" class="form-input" required autocomplete="username" placeholder="请输入用户名 (如: zhangsan)">
                    </div>
+                   ${isRegister ? `
+                   <div class="auth-input-group">
+                       <label for="fullname">姓名</label>
+                       <input type="text" id="fullname" name="fullname" class="form-input" required autocomplete="name" placeholder="请输入真实姓名">
+                   </div>
+                   ` : ''}
                    <div class="auth-input-group">
                        <label for="password">密码</label>
-                       <input type="password" id="password" name="password" class="form-input" required autocomplete="current-password">
+                       <input type="password" id="password" name="password" class="form-input" required autocomplete="${isRegister ? 'new-password' : 'current-password'}" placeholder="请输入密码">
                    </div>
-                   <button type="submit" class="btn btn-primary auth-button">登录</button>
+                   <button type="submit" class="btn btn-primary auth-button">${isRegister ? '注册并自动登录' : '登录'}</button>
+                   <div style="text-align: center; margin-top: 1rem;">
+                       <a href="#" id="auth-mode-toggle" style="color: var(--secondary-color); text-decoration: none; font-size: 0.9rem;">
+                           ${isRegister ? '已有账号？返回登录' : '没有账号？立即注册'}
+                       </a>
+                   </div>
                </form>
            </div>
        </div>

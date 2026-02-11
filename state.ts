@@ -35,6 +35,7 @@ export const state: AppState = {
     priceData: { prices: {}, items: [], tieredDiscounts: [], markupPoints: [] },
     profiles: [],
     view: 'login',
+    authMode: 'login', // Default to login mode
     currentUser: null,
     selection: getInitialSelection(),
     customItems: [],
@@ -53,4 +54,5 @@ export const state: AppState = {
     loginLogs: [],
     showFinalQuote: false,
     selectedDiscountId: 'none',
+    isRestoringProfile: false,
 };
