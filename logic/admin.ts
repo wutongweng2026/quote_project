@@ -1,3 +1,4 @@
+
 import { state, supabase } from '../state';
 import { renderApp, showModal, setSyncStatus, renderAdminDataTableBody } from '../ui';
 import type { PostgrestError } from '@supabase/supabase-js';
@@ -91,19 +92,38 @@ export function attachAdminPanelListeners() {
         setSyncStatus(error ? 'error' : 'saved');
     }, 700);
 
-    $('#markup-points-list, #tiered-discount-list')?.addEventListener('input', (e) => debouncedUpdate(e.target as HTMLInputElement));
+    // FIX: Use delegation on app-body for inputs to ensure it works for both lists (querySelector only selects first match)
+    $('.app-body')?.addEventListener('input', (e) => {
+        const target = e.target as HTMLInputElement;
+        if (target.closest('#markup-points-list') || target.closest('#tiered-discount-list')) {
+            debouncedUpdate(target);
+        }
+    });
     
-    $('.admin-content')?.addEventListener('click', async (e) => {
+    // Fixed selector from .admin-content to .app-body to capture events correctly
+    $('.app-body')?.addEventListener('click', async (e) => {
         const target = e.target as HTMLElement;
-        const button = target.closest('button');
+        // Safety check for text nodes if click lands on text
+        const safeTarget = (target.nodeType === 3 ? target.parentElement : target) as HTMLElement;
+        if (!safeTarget) return;
 
-        if (target.id === 'add-markup-point-btn' || target.closest('#add-markup-point-btn')) {
-            const { data, error } = await supabase.from('quote_markups').insert({ alias: '新点位', value: 0 }).select().single();
+        const button = safeTarget.closest('button');
+
+        if (safeTarget.id === 'add-markup-point-btn' || safeTarget.closest('#add-markup-point-btn')) {
+            // FIX: Generate unique alias to avoid DB unique constraint errors
+            const nextIndex = state.priceData.markupPoints.length + 1;
+            const { data, error } = await supabase.from('quote_markups').insert({ alias: `新点位 ${nextIndex}`, value: 0 }).select().single();
             if (error) return showModal({ title: '添加失败', message: error.message });
             state.priceData.markupPoints.push(data); renderApp();
         }
-        if (target.id === 'add-tier-btn' || target.closest('#add-tier-btn')) {
-            const { data, error } = await supabase.from('quote_discounts').insert({ threshold: 0, rate: 10 }).select().single();
+        if (safeTarget.id === 'add-tier-btn' || safeTarget.closest('#add-tier-btn')) {
+            // FIX: Generate unique threshold to avoid DB unique constraint errors
+            const maxThreshold = state.priceData.tieredDiscounts.length > 0 
+                ? Math.max(...state.priceData.tieredDiscounts.map(d => d.threshold)) 
+                : 0;
+            const newThreshold = maxThreshold + 10;
+            
+            const { data, error } = await supabase.from('quote_discounts').insert({ threshold: newThreshold, rate: 10 }).select().single();
             if (error) return showModal({ title: '添加失败', message: error.message });
             state.priceData.tieredDiscounts.push(data); renderApp();
         }
@@ -113,8 +133,20 @@ export function attachAdminPanelListeners() {
             const table = isMarkup ? 'quote_markups' : 'quote_discounts';
             const { error } = await supabase.from(table).delete().eq('id', id);
             if (error) return showModal({ title: '删除失败', message: error.message });
-            if (isMarkup) state.priceData.markupPoints = state.priceData.markupPoints.filter(p => p.id !== id);
-            else state.priceData.tieredDiscounts = state.priceData.tieredDiscounts.filter(t => t.id !== id);
+            
+            if (isMarkup) {
+                state.priceData.markupPoints = state.priceData.markupPoints.filter(p => p.id !== id);
+                // Reset selected markup if it was the one deleted
+                if (state.markupPoints === id) {
+                    state.markupPoints = state.priceData.markupPoints[0]?.id || 0;
+                }
+            } else {
+                state.priceData.tieredDiscounts = state.priceData.tieredDiscounts.filter(t => t.id !== id);
+                // Reset selected discount if it was the one deleted
+                if (state.selectedDiscountId === id) {
+                    state.selectedDiscountId = 'none';
+                }
+            }
             renderApp();
         }
     });
