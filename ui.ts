@@ -40,13 +40,13 @@ export function renderApp() {
     } else if (state.view === 'quote') {
         viewHtml = renderQuoteTool();
         attachListeners = attachQuoteToolListeners;
-    } else if (state.view === 'admin' && (state.currentUser.role === 'admin' || state.currentUser.role === 'manager')) {
+    } else if (state.view === 'admin' && (state.currentUser?.role === 'admin' || state.currentUser?.role === 'manager')) {
         viewHtml = renderAdminPanel();
         attachListeners = attachAdminPanelListeners;
-    } else if (state.view === 'userManagement' && state.currentUser.role === 'admin') {
+    } else if (state.view === 'userManagement' && state.currentUser?.role === 'admin') {
         viewHtml = renderUserManagementPanel();
         attachListeners = attachUserManagementListeners;
-    } else if (state.view === 'loginLog' && state.currentUser.role === 'admin') {
+    } else if (state.view === 'loginLog' && state.currentUser?.role === 'admin') {
         viewHtml = renderLoginLogPanel();
         attachListeners = attachLoginLogListeners;
     } else {
