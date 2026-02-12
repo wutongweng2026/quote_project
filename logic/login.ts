@@ -27,17 +27,35 @@ export function attachLoginListeners() {
         const loginButton = target.querySelector('.auth-button') as HTMLButtonElement;
         const errorDiv = $('#login-error') as HTMLDivElement;
 
+        // Reset error
+        errorDiv.style.display = 'none';
+
         if (!usernameInput || !password) return;
-        if (state.authMode === 'register' && !fullNameInput?.value.trim()) {
-             errorDiv.textContent = '请输入您的真实姓名';
-             errorDiv.style.display = 'block';
-             return;
+
+        // 注册时的严格校验
+        if (state.authMode === 'register') {
+            if (!fullNameInput?.value.trim()) {
+                 errorDiv.textContent = '请输入您的真实姓名';
+                 errorDiv.style.display = 'block';
+                 return;
+            }
+            // 校验用户名: 仅允许字母、数字、下划线 (如果用户直接输入了 @ 认为是高级用户或 legacy，跳过此校验)
+            if (!usernameInput.includes('@') && !/^[a-zA-Z0-9_]+$/.test(usernameInput)) {
+                errorDiv.textContent = '用户名格式错误：仅允许使用英文字母、数字或下划线。';
+                errorDiv.style.display = 'block';
+                return;
+            }
+            // 校验密码: 长度 > 6
+            if (password.length <= 6) {
+                errorDiv.textContent = '密码强度不足：长度必须大于 6 位。';
+                errorDiv.style.display = 'block';
+                return;
+            }
         }
 
         loginButton.disabled = true; 
         loginButton.innerHTML = `<span class="spinner"></span> 正在处理`; 
-        errorDiv.style.display = 'none';
-
+        
         // 自动构建虚拟邮箱: zhangsan -> zhangsan@longsheng.local
         // 如果用户直接输入了包含 @ 的完整邮箱（如 admin@admin），则直接使用
         const email = usernameInput.includes('@') ? usernameInput : `${usernameInput}${INTERNAL_EMAIL_SUFFIX}`;
@@ -50,14 +68,14 @@ export function attachLoginListeners() {
                     // Downgrade standard login failures to warn to avoid console noise
                     if (signInError.message === 'Invalid login credentials') {
                         console.warn("Login attempt failed: Invalid credentials");
-                        throw new Error(`用户名或密码错误 (尝试登录: ${email})。如果您是新用户，请点击下方链接注册。`);
+                        throw new Error(`用户名或密码错误。`);
                     } else if (signInError.message.includes('Email not confirmed')) {
                         console.warn("Login attempt failed: Email not confirmed");
-                        throw new Error(`账号未激活 (Email: ${email})。请联系管理员或检查邮箱。`);
+                        throw new Error(`账号未激活。请联系管理员或检查邮箱。`);
                     }
                     
                     console.error("Login Error Details:", signInError);
-                    throw signInError;
+                    throw new Error("登录失败，请检查用户名或密码。");
                 }
             } else {
                 // --- 注册逻辑 (含账号恢复) ---
@@ -114,11 +132,11 @@ export function attachLoginListeners() {
                 if (!isApproved) {
                     // 对于待审批用户，显示成功提示，并在确认后登出
                     showModal({
-                        title: '注册成功',
+                        title: '注册成功，等待审核',
                         message: `
                             <p>您的账号 <strong>${usernameInput}</strong> 已成功创建。</p>
-                            <p>出于安全考虑，新账号需要<strong>管理员批准</strong>后方可使用。</p>
-                            <p>请联系管理员处理，批准后即可登录。</p>
+                            <p style="color: #ea580c; font-weight: 500;">出于安全考虑，新账号需要管理员批准后方可登录。</p>
+                            <p>请联系管理员处理。</p>
                         `,
                         confirmText: '返回登录',
                         isDismissible: false,

@@ -74,6 +74,7 @@ function renderLoginView() {
                    <div class="auth-input-group">
                        <label for="username">用户名</label>
                        <input type="text" id="username" name="username" class="form-input" required autocomplete="username" placeholder="请输入用户名 (如: zhangsan)">
+                       ${isRegister ? `<small style="color: #64748b; font-size: 0.8rem; margin-top: 4px; display: block;">* 仅支持英文字母、数字或下划线</small>` : ''}
                    </div>
                    ${isRegister ? `
                    <div class="auth-input-group">
@@ -84,6 +85,7 @@ function renderLoginView() {
                    <div class="auth-input-group">
                        <label for="password">密码</label>
                        <input type="password" id="password" name="password" class="form-input" required autocomplete="${isRegister ? 'new-password' : 'current-password'}" placeholder="请输入密码">
+                       ${isRegister ? `<small style="color: #64748b; font-size: 0.8rem; margin-top: 4px; display: block;">* 密码长度需大于 6 位</small>` : ''}
                    </div>
                    <button type="submit" class="btn btn-primary auth-button">${isRegister ? '注册并自动登录' : '立即登录'}</button>
                    <div style="text-align: center; margin-top: 1.5rem;">

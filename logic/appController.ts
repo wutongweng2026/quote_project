@@ -1,4 +1,5 @@
 
+
 import { supabase, state } from '../state';
 import { renderApp, showModal } from '../ui';
 import { seedDataObject } from '../seedData';
@@ -232,6 +233,8 @@ export async function handleUserSession(session: Session | null) {
         console.error("Profile load error:", error);
         state.view = 'login';
         state.appStatus = 'ready';
+        state.currentUser = null;
+        renderApp(); // <--- FIX: Ensure UI updates to login screen BEFORE signing out
         await supabase.auth.signOut(); // Log out corrupted session
         return;
     }
@@ -293,6 +296,13 @@ export async function initializeApp() {
     });
 
     // Check the initial session state on page load
-    const { data: { session } } = await supabase.auth.getSession();
-    await handleUserSession(session);
+    try {
+        const { data: { session } } = await supabase.auth.getSession();
+        await handleUserSession(session);
+    } catch(err: any) {
+        console.error("Critical initialization error:", err);
+        state.appStatus = 'error';
+        state.errorMessage = `初始化严重错误: ${err.message}`;
+        renderApp();
+    }
 }
