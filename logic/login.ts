@@ -1,4 +1,5 @@
 
+
 import { state, supabase } from '../state';
 import { renderApp, showModal } from '../ui';
 import { handleUserSession } from './appController';
@@ -20,7 +21,8 @@ export function attachLoginListeners() {
         e.preventDefault();
         const target = e.target as HTMLFormElement;
         const usernameInput = (target.elements.namedItem('username') as HTMLInputElement).value.trim();
-        const password = (target.elements.namedItem('password') as HTMLInputElement).value;
+        // Fix: Trim password to remove accidental trailing spaces from copy-paste
+        const password = (target.elements.namedItem('password') as HTMLInputElement).value.trim();
         const fullNameInput = target.querySelector('#fullname') as HTMLInputElement; // 仅注册模式存在
         const loginButton = target.querySelector('.auth-button') as HTMLButtonElement;
         const errorDiv = $('#login-error') as HTMLDivElement;
@@ -45,12 +47,16 @@ export function attachLoginListeners() {
                 const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
                 
                 if (signInError) {
-                    console.error("Login Error Details:", signInError);
+                    // Downgrade standard login failures to warn to avoid console noise
                     if (signInError.message === 'Invalid login credentials') {
+                        console.warn("Login attempt failed: Invalid credentials");
                         throw new Error(`用户名或密码错误 (尝试登录: ${email})。如果您是新用户，请点击下方链接注册。`);
                     } else if (signInError.message.includes('Email not confirmed')) {
+                        console.warn("Login attempt failed: Email not confirmed");
                         throw new Error(`账号未激活 (Email: ${email})。请联系管理员或检查邮箱。`);
                     }
+                    
+                    console.error("Login Error Details:", signInError);
                     throw signInError;
                 }
             } else {

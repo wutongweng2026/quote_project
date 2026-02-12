@@ -40,16 +40,18 @@ export function renderApp() {
     } else if (state.view === 'quote') {
         viewHtml = renderQuoteTool();
         attachListeners = attachQuoteToolListeners;
-    } else if (state.view === 'admin' && (state.currentUser?.role === 'admin' || state.currentUser?.role === 'manager')) {
+    } else if (state.view === 'admin' && state.currentUser && (state.currentUser.role === 'admin' || state.currentUser.role === 'manager')) {
+        // Explicitly checked state.currentUser above to satisfy TS strict null checks
         viewHtml = renderAdminPanel();
         attachListeners = attachAdminPanelListeners;
-    } else if (state.view === 'userManagement' && state.currentUser?.role === 'admin') {
+    } else if (state.view === 'userManagement' && state.currentUser && state.currentUser.role === 'admin') {
         viewHtml = renderUserManagementPanel();
         attachListeners = attachUserManagementListeners;
-    } else if (state.view === 'loginLog' && state.currentUser?.role === 'admin') {
+    } else if (state.view === 'loginLog' && state.currentUser && state.currentUser.role === 'admin') {
         viewHtml = renderLoginLogPanel();
         attachListeners = attachLoginLogListeners;
     } else {
+        // Fallback for authenticated users who might be in a view they lost permission for, or default view
         viewHtml = renderQuoteTool();
         attachListeners = attachQuoteToolListeners;
     }
@@ -124,6 +126,7 @@ function renderQuoteTool() {
     
     const finalPriceVisibility = state.showFinalQuote ? 'visible' : 'hidden';
     const finalPriceOpacity = state.showFinalQuote ? '1' : '0';
+    // TS Check: These optional chainings are safe here because they just return undefined if null, which is handled
     const isAdmin = state.currentUser?.role === 'admin';
     const isManager = state.currentUser?.role === 'manager';
 
