@@ -19,12 +19,22 @@ const $ = (selector: string) => document.querySelector(selector);
 export function renderApp() {
     let viewHtml = '';
     let attachListeners: (() => void) | null = null;
+    
+    // Logic to toggle body background for login screen
+    const isLoginView = state.view === 'login' || !state.currentUser;
+    if (isLoginView && state.appStatus !== 'loading') {
+        document.body.classList.add('has-bg-image');
+        appContainer.classList.add('transparent-container');
+    } else {
+        document.body.classList.remove('has-bg-image');
+        appContainer.classList.remove('transparent-container');
+    }
 
     if (state.appStatus === 'loading') {
         viewHtml = `<div class="app-status-container"><div class="loading-spinner"></div><h2 style="margin-top: 1.5rem; color: var(--text-color-secondary);">系统初始化中...</h2></div>`;
     } else if (state.appStatus === 'error') {
         viewHtml = `<div class="app-status-container"><h2 style="color:var(--danger-color)">系统遇到问题</h2><div class="error-details">${state.errorMessage}</div><button class="btn btn-primary" onclick="window.location.reload()" style="margin-top:1rem">刷新重试</button></div>`;
-    } else if (state.view === 'login' || !state.currentUser) {
+    } else if (isLoginView) {
         viewHtml = renderLoginView();
         attachListeners = attachLoginListeners;
     } else if (state.view === 'quote') {

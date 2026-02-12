@@ -76,6 +76,17 @@
             padding: 40px 20px;
             -webkit-font-smoothing: antialiased;
         }
+        
+        /* --- Login Background Image Styles --- */
+        body.has-bg-image {
+            /* ⚠️ 请在这里替换您的图片链接 */
+            /* 这里的链接是一个风格相似的雨景图作为演示 */
+            background-image: url('https://images.unsplash.com/photo-1510217036720-c75c88b77051?q=80&w=2664&auto=format&fit=crop'); 
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+            background-attachment: fixed;
+        }
 
         #app {
             width: 100%;
@@ -90,6 +101,13 @@
             flex-direction: column;
             position: relative;
             z-index: 1;
+            transition: background 0.3s ease, box-shadow 0.3s ease;
+        }
+        
+        /* Transparent container for login view to show background */
+        #app.transparent-container {
+            background: transparent !important;
+            box-shadow: none !important;
         }
 
         h1, h2, h3 { color: var(--text-color-primary); font-weight: 600; letter-spacing: -0.02em; }
@@ -161,7 +179,17 @@
 
         /* --- Auth View --- */
         .auth-container { flex-grow: 1; padding: 2rem; display: flex; justify-content: center; align-items: center; }
-        .auth-box { width: 100%; max-width: 380px; }
+        .auth-box { 
+            width: 100%; max-width: 420px; 
+            /* Enhanced Card Style for Login */
+            background: rgba(255, 255, 255, 0.92);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            padding: 3rem 2.5rem;
+            border-radius: 24px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+            border: 1px solid rgba(255, 255, 255, 0.6);
+        }
         .auth-box h1 { text-align: center; margin-bottom: 2.5rem; color: var(--text-color-primary); }
         .auth-input-group { margin-bottom: 1.5rem; }
         .auth-input-group label { display: block; margin-bottom: 0.5rem; font-weight: 500; font-size: 0.9rem; color: var(--text-color-secondary); }
