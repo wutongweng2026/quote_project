@@ -92,7 +92,7 @@ export function attachAdminPanelListeners() {
         setSyncStatus(error ? 'error' : 'saved');
     }, 700);
 
-    // FIX: Use delegation on app-body for inputs to ensure it works for both lists (querySelector only selects first match)
+    // Use delegation on app-body for inputs to ensure it works for both lists
     $('.app-body')?.addEventListener('input', (e) => {
         const target = e.target as HTMLInputElement;
         if (target.closest('#markup-points-list') || target.closest('#tiered-discount-list')) {
@@ -100,33 +100,59 @@ export function attachAdminPanelListeners() {
         }
     });
     
-    // Fixed selector from .admin-content to .app-body to capture events correctly
     $('.app-body')?.addEventListener('click', async (e) => {
         const target = e.target as HTMLElement;
-        // Safety check for text nodes if click lands on text
         const safeTarget = (target.nodeType === 3 ? target.parentElement : target) as HTMLElement;
         if (!safeTarget) return;
 
         const button = safeTarget.closest('button');
 
         if (safeTarget.id === 'add-markup-point-btn' || safeTarget.closest('#add-markup-point-btn')) {
-            // FIX: Generate unique alias to avoid DB unique constraint errors
-            const nextIndex = state.priceData.markupPoints.length + 1;
-            const { data, error } = await supabase.from('quote_markups').insert({ alias: `新点位 ${nextIndex}`, value: 0 }).select().single();
-            if (error) return showModal({ title: '添加失败', message: error.message });
-            state.priceData.markupPoints.push(data); renderApp();
+            // Enhanced unique alias generation to prevent conflicts
+            const existingAliases = state.priceData.markupPoints.map(p => p.alias);
+            let nextIndex = 1;
+            while (existingAliases.includes(`新点位 ${nextIndex}`)) {
+                nextIndex++;
+            }
+            const alias = `新点位 ${nextIndex}`;
+
+            const { data, error } = await supabase.from('quote_markups').insert({ alias, value: 0 }).select().single();
+            if (error) {
+                return showModal({ 
+                    title: '添加失败', 
+                    message: error.message + (error.message.includes('policy') ? '\n(提示: 数据库 RLS 策略可能禁止当前用户创建记录)' : '')
+                });
+            }
+            
+            state.priceData.markupPoints.push(data);
+            await updateLastUpdatedTimestamp(); // IMPORTANT: Update timestamp for cache invalidation
+            renderApp();
         }
+        
         if (safeTarget.id === 'add-tier-btn' || safeTarget.closest('#add-tier-btn')) {
-            // FIX: Generate unique threshold to avoid DB unique constraint errors
-            const maxThreshold = state.priceData.tieredDiscounts.length > 0 
-                ? Math.max(...state.priceData.tieredDiscounts.map(d => d.threshold)) 
-                : 0;
-            const newThreshold = maxThreshold + 10;
+            // Enhanced unique threshold generation
+            const existingThresholds = state.priceData.tieredDiscounts.map(d => d.threshold);
+            let newThreshold = 10;
+            if (existingThresholds.length > 0) {
+                 newThreshold = Math.max(...existingThresholds) + 10;
+            }
+            while (existingThresholds.includes(newThreshold)) {
+                newThreshold += 10;
+            }
             
             const { data, error } = await supabase.from('quote_discounts').insert({ threshold: newThreshold, rate: 10 }).select().single();
-            if (error) return showModal({ title: '添加失败', message: error.message });
-            state.priceData.tieredDiscounts.push(data); renderApp();
+            if (error) {
+                return showModal({ 
+                    title: '添加失败', 
+                    message: error.message + (error.message.includes('policy') ? '\n(提示: 数据库 RLS 策略可能禁止当前用户创建记录)' : '')
+                });
+            }
+            
+            state.priceData.tieredDiscounts.push(data);
+            await updateLastUpdatedTimestamp(); // IMPORTANT: Update timestamp for cache invalidation
+            renderApp();
         }
+
         if (button?.classList.contains('remove-markup-point-btn') || button?.classList.contains('remove-tier-btn')) {
             const id = parseInt(button.dataset.id || ''); if (isNaN(id)) return;
             const isMarkup = button.classList.contains('remove-markup-point-btn');
@@ -136,17 +162,17 @@ export function attachAdminPanelListeners() {
             
             if (isMarkup) {
                 state.priceData.markupPoints = state.priceData.markupPoints.filter(p => p.id !== id);
-                // Reset selected markup if it was the one deleted
                 if (state.markupPoints === id) {
                     state.markupPoints = state.priceData.markupPoints[0]?.id || 0;
                 }
             } else {
                 state.priceData.tieredDiscounts = state.priceData.tieredDiscounts.filter(t => t.id !== id);
-                // Reset selected discount if it was the one deleted
                 if (state.selectedDiscountId === id) {
                     state.selectedDiscountId = 'none';
                 }
             }
+            
+            await updateLastUpdatedTimestamp(); // IMPORTANT: Update timestamp to ensure delete persists on reload
             renderApp();
         }
     });
@@ -195,7 +221,6 @@ export function attachAdminPanelListeners() {
         const file = (e.target as HTMLInputElement).files?.[0]; if (!file) return;
         const reader = new FileReader();
         reader.onload = async (event) => {
-            // FIX: Changed UintArray to Uint8Array to correctly handle the ArrayBuffer from FileReader.
             const data = new Uint8Array(event.target?.result as ArrayBuffer);
             const workbook = XLSX.read(data, { type: 'array' });
             const sheetName = workbook.SheetNames[0];

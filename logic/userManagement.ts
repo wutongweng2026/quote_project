@@ -27,7 +27,7 @@ export function attachUserManagementListeners() {
                     <div class="auth-input-group">
                         <label for="new-username">用户名 (登录账号)</label>
                         <input type="text" id="new-username" class="form-input" placeholder="例如: zhangsan" required>
-                        <small style="color: #666; display:block; margin-top:4px;">* 仅支持字母、数字或下划线</small>
+                        <small style="color: #666; display:block; margin-top:4px; font-size: 0.8rem;">* 仅支持字母、数字或下划线</small>
                     </div>
                     <div class="auth-input-group">
                         <label for="new-fullname">员工姓名 (显示名称)</label>
@@ -153,28 +153,20 @@ export function attachUserManagementListeners() {
         if (button.classList.contains('delete-user-btn')) {
             showModal({
                 title: '确认删除',
-                message: `确定要永久删除此用户吗？此操作无法撤销。`,
+                message: `确定要删除此用户吗？<br><br><span style="font-size:0.9rem; color:var(--text-color-secondary)">注意：这将删除该用户的资料并禁止其登录。</span>`,
                 showCancel: true, isDanger: true, confirmText: '确认删除',
                 onConfirm: async () => {
                     try {
-                        // 客户端删除 Auth 用户需要 Service Role 权限，通常被 RLS 禁止。
-                        // 在纯前端模式下，我们通常只能“软删除”或者从 profiles 中删除，让 Auth 用户变成“孤魂野鬼”。
-                        // 但如果项目开启了 Delete User RPC，可以尝试调用。
-                        // 这里我们优先删除 profiles 数据，使用户无法登录系统逻辑。
-                        
+                        // 1. 从 profiles 表删除数据
+                        // 这会自动禁止用户进入系统，因为 appController.ts 在登录时会检查 profile 是否存在
                         const { error: profileError } = await supabase.from('profiles').delete().eq('id', userId);
                         if (profileError) throw profileError;
                         
-                        // 尝试删除 Auth 用户 (可能会失败，取决于 Supabase 设置，但 UI 上我们已经移除了该用户)
-                        // 注意：这里可能会报错，我们捕获它但不阻断流程，因为 Profile 没了用户就进不来了
-                        try {
-                           await supabase.auth.admin.deleteUser(userId);
-                        } catch (e) {
-                            console.warn("Auth delete failed (expected in client-side only mode):", e);
-                        }
-
+                        // 2. 更新本地状态
                         state.profiles = state.profiles.filter(p => p.id !== userId);
                         state.showCustomModal = false;
+                        
+                        // 3. 不调用 auth.admin.deleteUser，因为客户端无权限，且删除 profile 已达到业务目的
                         renderApp();
                     } catch(err: any) {
                         showModal({title: "删除失败", message: `操作失败: ${err.message}`, isDanger: true});
