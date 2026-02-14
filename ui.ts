@@ -20,20 +20,32 @@ export function renderApp() {
     let viewHtml = '';
     let attachListeners: (() => void) | null = null;
     
-    // Logic to toggle body background for login screen
     const isLoginView = state.view === 'login' || !state.currentUser;
+    
+    // Toggle body class for centering login view
     if (isLoginView && state.appStatus !== 'loading') {
-        document.body.classList.add('has-bg-image');
-        appContainer.classList.add('transparent-container');
+        document.body.classList.add('login-body');
+        // Remove app-layout wrapper styles for login
+        appContainer.className = '';
     } else {
-        document.body.classList.remove('has-bg-image');
-        appContainer.classList.remove('transparent-container');
+        document.body.classList.remove('login-body');
+        appContainer.className = 'app-layout';
     }
 
     if (state.appStatus === 'loading') {
-        viewHtml = `<div class="app-status-container"><div class="loading-spinner"></div><h2 style="margin-top: 1.5rem; color: var(--text-color-secondary);">系统初始化中...</h2></div>`;
+        viewHtml = `
+            <div style="flex:1; display:flex; flex-direction:column; justify-content:center; align-items:center;">
+                <div class="loading-spinner"></div>
+                <h2 style="margin-top: 1.5rem; color: var(--text-500); font-weight: 500; font-size: 0.9rem;">系统初始化中...</h2>
+            </div>`;
     } else if (state.appStatus === 'error') {
-        viewHtml = `<div class="app-status-container"><h2 style="color:var(--danger-color)">系统遇到问题</h2><div class="error-details">${state.errorMessage}</div><button class="btn btn-primary" onclick="window.location.reload()" style="margin-top:1rem">刷新重试</button></div>`;
+        viewHtml = `
+            <div style="flex:1; display:flex; flex-direction:column; justify-content:center; align-items:center; padding: 2rem; text-align: center;">
+                <span class="material-symbols-outlined" style="font-size: 3rem; color: var(--danger-text); margin-bottom: 1rem;">error</span>
+                <h2 style="color: var(--text-900); margin-bottom: 0.5rem;">系统错误</h2>
+                <div class="error-details" style="color: var(--text-500); max-width: 400px; margin-bottom: 1.5rem;">${state.errorMessage}</div>
+                <button class="btn btn-primary" onclick="window.location.reload()">刷新页面</button>
+            </div>`;
     } else if (isLoginView) {
         viewHtml = renderLoginView();
         attachListeners = attachLoginListeners;
@@ -41,7 +53,6 @@ export function renderApp() {
         viewHtml = renderQuoteTool();
         attachListeners = attachQuoteToolListeners;
     } else if (state.view === 'admin' && state.currentUser && (state.currentUser.role === 'admin' || state.currentUser.role === 'manager')) {
-        // Explicitly checked state.currentUser above to satisfy TS strict null checks
         viewHtml = renderAdminPanel();
         attachListeners = attachAdminPanelListeners;
     } else if (state.view === 'userManagement' && state.currentUser && state.currentUser.role === 'admin') {
@@ -51,7 +62,6 @@ export function renderApp() {
         viewHtml = renderLoginLogPanel();
         attachListeners = attachLoginLogListeners;
     } else {
-        // Fallback for authenticated users who might be in a view they lost permission for, or default view
         viewHtml = renderQuoteTool();
         attachListeners = attachQuoteToolListeners;
     }
@@ -66,35 +76,60 @@ export function renderApp() {
 function renderLoginView() {
     const isRegister = state.authMode === 'register';
     return `
-       <div class="auth-container">
-           <div class="auth-box">
-               <h1>产品报价系统 ${isRegister ? '注册' : '登录'}</h1>
-               <div id="login-error" class="auth-error" style="display: none;"></div>
-               <form id="login-form">
-                   <div class="auth-input-group">
-                       <label for="username">用户名</label>
-                       <input type="text" id="username" name="username" class="form-input" required autocomplete="username" placeholder="请输入用户名 (如: zhangsan)">
-                       ${isRegister ? `<small style="color: #64748b; font-size: 0.8rem; margin-top: 4px; display: block;">* 仅支持英文字母、数字或下划线</small>` : ''}
-                   </div>
-                   ${isRegister ? `
-                   <div class="auth-input-group">
-                       <label for="fullname">真实姓名</label>
-                       <input type="text" id="fullname" name="fullname" class="form-input" required autocomplete="name" placeholder="请输入您的姓名">
-                   </div>
-                   ` : ''}
-                   <div class="auth-input-group">
-                       <label for="password">密码</label>
-                       <input type="password" id="password" name="password" class="form-input" required autocomplete="${isRegister ? 'new-password' : 'current-password'}" placeholder="请输入密码">
-                       ${isRegister ? `<small style="color: #64748b; font-size: 0.8rem; margin-top: 4px; display: block;">* 密码长度需大于 6 位</small>` : ''}
-                   </div>
-                   <button type="submit" class="btn btn-primary auth-button">${isRegister ? '注册并自动登录' : '立即登录'}</button>
-                   <div style="text-align: center; margin-top: 1.5rem;">
-                       <a href="#" id="auth-mode-toggle" style="color: var(--secondary-text-color); text-decoration: none; font-size: 0.95rem; font-weight: 500;">
-                           ${isRegister ? '已有账号？返回登录' : '没有账号？创建新账号'}
-                       </a>
-                   </div>
-               </form>
+       <div class="auth-card">
+           <div style="display: flex; flex-direction: column; align-items: center; margin-bottom: 2rem;">
+               <div style="background: var(--primary-light); padding: 0.75rem; border-radius: 0.75rem; color: var(--primary); margin-bottom: 1rem;">
+                    <svg width="32" height="32" viewBox="0 0 48 48" fill="currentColor"><path d="M4 42.4379C4 42.4379 14.0962 36.0744 24 41.1692C35.0664 46.8624 44 42.2078 44 42.2078L44 7.01134C44 7.01134 35.068 11.6577 24.0031 5.96913C14.0971 0.876274 4 7.27094 4 7.27094L4 42.4379Z"></path></svg>
+               </div>
+               <div style="display: flex; flex-direction: column; align-items: flex-end;">
+                   <h1 style="font-size: 1.5rem; font-weight: 700; color: var(--text-900); letter-spacing: -0.025em; margin: 0;">快速报价系统 v5</h1>
+                   <p style="color: var(--text-500); font-size: 0.875rem; margin-top: 0.25rem;">--龙盛科技</p>
+               </div>
            </div>
+
+           <div id="login-error" style="background: var(--danger-bg); color: var(--danger-text); padding: 0.75rem; border-radius: var(--radius-md); font-size: 0.875rem; margin-bottom: 1.5rem; display: none;"></div>
+           
+           <form id="login-form">
+               <div style="margin-bottom: 1.25rem;">
+                   <label for="username" style="display: block; margin-bottom: 0.5rem; font-weight: 500; font-size: 0.875rem; color: var(--text-700);">用户名</label>
+                   <input type="text" id="username" name="username" class="form-input" required autocomplete="username" placeholder="用户名如：zhangsan">
+                   ${isRegister ? `<small style="color: var(--text-500); font-size: 0.75rem; margin-top: 4px; display: block;">* 仅支持英文字母、数字或下划线</small>` : ''}
+               </div>
+               
+               ${isRegister ? `
+               <div style="margin-bottom: 1.25rem;">
+                   <label for="fullname" style="display: block; margin-bottom: 0.5rem; font-weight: 500; font-size: 0.875rem; color: var(--text-700);">真实姓名</label>
+                   <input type="text" id="fullname" name="fullname" class="form-input" required autocomplete="name" placeholder="请输入姓名">
+               </div>
+               ` : ''}
+               
+               <div style="margin-bottom: 1.5rem;">
+                   <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                        <label for="password" style="font-weight: 500; font-size: 0.875rem; color: var(--text-700);">密码</label>
+                   </div>
+                   <input type="password" id="password" name="password" class="form-input" required autocomplete="${isRegister ? 'new-password' : 'current-password'}" placeholder="••••••••">
+               </div>
+               
+               <button type="submit" class="btn btn-primary" style="width: 100%; height: 3rem;">${isRegister ? '注册' : '登录'}</button>
+               
+               <div style="text-align: center; margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid var(--border-color);">
+                   <p style="font-size: 0.875rem; color: var(--text-500);">
+                       ${isRegister ? '已有账号？ ' : "没有账号？ "}
+                       <a href="#" id="auth-mode-toggle" style="color: var(--primary); text-decoration: none; font-weight: 600;">
+                           ${isRegister ? '去登录' : '申请账号'}
+                       </a>
+                   </p>
+               </div>
+           </form>
+           
+            <div style="margin-top: 2rem; display: flex; justify-content: center; gap: 1.5rem;">
+                <div style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.75rem; color: var(--text-400);">
+                    <span class="status-pulse" style="width: 6px; height: 6px;"></span> 系统运行正常
+                </div>
+                 <div style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.75rem; color: var(--text-400);">
+                    <span class="material-symbols-outlined" style="font-size: 14px;">lock</span> 安全加密传输
+                </div>
+            </div>
        </div>
    `;
 }
@@ -104,14 +139,16 @@ function renderCustomModal() {
     return `
        <div class="modal-overlay" id="custom-modal-overlay">
            <div class="modal-content">
-                <div class="modal-header"><h2>${title}</h2></div>
-                <div class="modal-body">
-                    <div>${message}</div>
-                    ${errorMessage ? `<div class="modal-error">${errorMessage}</div>` : ''}
+                <div style="padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--border-color);">
+                    <h2 style="margin: 0; font-size: 1.125rem; font-weight: 600; color: var(--text-900);">${title}</h2>
                 </div>
-                <div class="modal-footer">
+                <div style="padding: 1.5rem; color: var(--text-700); font-size: 0.95rem; line-height: 1.6;">
+                    <div>${message}</div>
+                    ${errorMessage ? `<div style="background:var(--danger-bg); color:var(--danger-text); padding:0.75rem; border-radius:var(--radius-md); margin-top:1rem; font-size:0.875rem;">${errorMessage}</div>` : ''}
+                </div>
+                <div style="padding: 1rem 1.5rem; background: var(--bg-alt); display: flex; justify-content: flex-end; gap: 0.75rem; border-top: 1px solid var(--border-color);">
                    ${showCancel ? `<button class="btn btn-ghost" id="custom-modal-cancel-btn">${cancelText}</button>` : ''}
-                   <button class="btn ${isDanger ? 'btn-danger' : 'btn-primary'}" id="custom-modal-confirm-btn">${confirmText}</button>
+                   <button class="btn ${isDanger ? 'btn-primary' : 'btn-primary'}" style="${isDanger ? 'background: #ef4444; box-shadow:none;' : ''}" id="custom-modal-confirm-btn">${confirmText}</button>
                 </div>
            </div>
        </div>
@@ -121,138 +158,197 @@ function renderCustomModal() {
 function renderQuoteTool() {
     const totals = calculateTotals();
     const finalConfigText = getFinalConfigText();
-    // Use full date format YYYY-MM-DD HH:mm for clarity
     const lastUpdatedDate = state.lastUpdated 
-        ? new Date(state.lastUpdated).toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }).replace(/\//g, '-') 
-        : '无';
+        ? new Date(state.lastUpdated).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).replace(/\//g, '-') 
+        : '--';
     
     const finalPriceVisibility = state.showFinalQuote ? 'visible' : 'hidden';
     const finalPriceOpacity = state.showFinalQuote ? '1' : '0';
-    // TS Check: These optional chainings are safe here because they just return undefined if null, which is handled
     const isAdmin = state.currentUser?.role === 'admin';
     const isManager = state.currentUser?.role === 'manager';
 
     return `
-       <div class="app-layout">
-           <header class="app-header">
-               <h1>产品报价系统 v3 <span class="header-subtext">--龙盛科技</span></h1>
-                <div class="header-actions">
-                   <span class="update-timestamp" title="上次数据同步时间">数据更新于: ${lastUpdatedDate}</span>
-                    ${isAdmin ? '<button class="header-btn" id="login-log-btn" title="查看登录日志">登录日志</button>' : ''}
-                    ${isAdmin ? '<button class="header-btn" id="user-management-btn" title="管理用户权限">用户管理</button>' : ''}
-                    ${(isAdmin || isManager) ? '<button class="header-btn" id="app-view-toggle-btn" title="管理价格与配置">后台管理</button>' : ''}
-                   <button class="header-btn" id="change-password-btn" title="修改当前登录密码">修改密码</button>
-                   <button class="header-btn" id="logout-btn">退出</button>
+       <header class="glass-header">
+           <div class="header-brand">
+               <div class="header-icon-box">
+                    <span class="material-symbols-outlined">eco</span>
                </div>
-           </header>
-           <main class="app-body">
-               <div class="product-matcher-section">
-                   <label for="matcher-input" style="font-size: 1rem; font-weight: 600; color: var(--text-color-primary); display:flex; align-items:center; gap:0.5rem;">
-                        <span style="font-size:1.2rem">💡</span> 智能配置推荐
-                   </label>
-                   <div class="matcher-input-group">
-                       <input type="text" id="matcher-input" class="form-input" placeholder="请输入您的预算（如 8000）或具体需求（如 4060显卡），系统将自动匹配最佳方案..." style="padding: 0.8rem 1rem;">
-                       <button id="match-config-btn" class="btn btn-primary" style="padding: 0 1.5rem;">生成方案</button>
+               <div style="display: flex; flex-direction: column; align-items: flex-end;">
+                    <div class="header-title">快速报价系统 v5</div>
+                    <span class="header-subtitle">--龙盛科技</span>
+               </div>
+           </div>
+           
+           <nav class="header-nav">
+               <div class="system-status-badge">
+                   <span class="status-pulse"></span>
+                   <span class="status-text">系统状态：优选模式</span>
+               </div>
+               <div style="height: 24px; width: 1px; background: var(--border-color);"></div>
+                ${isAdmin ? '<button class="btn btn-ghost" id="login-log-btn" style="font-size:0.8rem; padding: 0.4rem 0.8rem;">日志</button>' : ''}
+                ${isAdmin ? '<button class="btn btn-ghost" id="user-management-btn" style="font-size:0.8rem; padding: 0.4rem 0.8rem;">用户</button>' : ''}
+                ${(isAdmin || isManager) ? '<button class="btn btn-ghost" id="app-view-toggle-btn" style="font-size:0.8rem; padding: 0.4rem 0.8rem;">后台</button>' : ''}
+               
+               <button class="btn btn-ghost" id="change-password-btn" style="font-size:0.8rem; padding: 0.4rem 0.8rem;">修改密码</button>
+               
+               <button class="btn btn-icon" id="logout-btn" title="退出">
+                    <span class="material-symbols-outlined">logout</span>
+               </button>
+           </nav>
+       </header>
+
+       <main class="app-body">
+           <!-- AI Matcher Card -->
+           <div class="eco-card ai-feature">
+               <div style="display: flex; flex-direction: column; gap: 1rem;">
+                   <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+                       <div class="badge badge-green" style="width: fit-content; gap: 4px;">
+                            <span class="material-symbols-outlined" style="font-size: 14px;">auto_awesome</span> 
+                            AI 智能配置优化
+                       </div>
+                       <h2 style="font-size: 1.5rem; font-weight: 800; color: var(--text-900); letter-spacing: -0.03em;">自动生成最适合您的硬件配置方案</h2>
+                       <p style="color: var(--text-500); font-size: 0.95rem; max-width: 800px;">描述您的项目需求（例如：“6000元以内的4060游戏主机”）；或者直接粘贴配置清单，支持 <strong>| / \ 、</strong> 及 <strong>空格</strong> 分隔。例如：ThinkStationK-C3 * 1 | I5-13400 * 1 / 8G DDR5 5600 * 1</p>
+                   </div>
+                   
+                   <div style="position: relative; margin-top: 1rem;">
+                       <input type="text" id="matcher-input" style="width: 100%; height: 4rem; padding-left: 1.5rem; padding-right: 9rem; border-radius: 1rem; border: 1px solid var(--border-color); font-size: 1rem; box-shadow: 0 2px 5px rgba(0,0,0,0.02);" placeholder="例如：4K视频剪辑与机器学习工作站...">
+                       <button id="match-config-btn" class="btn btn-primary" style="position: absolute; right: 0.5rem; top: 0.5rem; bottom: 0.5rem; padding: 0 1.5rem; border-radius: 0.75rem;">
+                            一键生成 <span class="material-symbols-outlined" style="font-size: 1.1rem; margin-left: 4px;">bolt</span>
+                       </button>
                    </div>
                </div>
-               <div class="data-table-container">
-                   <table class="data-table">
-                       <colgroup> <col style="width: 20%;"> <col style="width: 45%;"> <col style="width: 15%;"> <col style="width: 20%;"> </colgroup>
-                       <thead> <tr> <th>配置清单</th> <th>规格型号</th> <th>数量</th> <th>操作</th> </tr> </thead>
-                       <tbody>
-                           ${CONFIG_ROWS.map(renderConfigRow).join('')}
-                           ${state.customItems.map(renderCustomItemRow).join('')}
-                           ${renderAddCategoryRow()}
-                       </tbody>
-                   </table>
+           </div>
+
+           <!-- Data Table Card -->
+           <div class="eco-card">
+               <div class="section-header" style="margin-bottom: 0; padding: 1.5rem; border-bottom: 1px solid var(--border-color);">
+                   <div class="section-title">
+                       <div class="section-icon green">
+                           <span class="material-symbols-outlined">memory</span>
+                       </div>
+                       硬件配置清单
+                   </div>
+                   <span class="text-xs-bold text-muted">上次更新: ${lastUpdatedDate}</span>
+               </div>
+               
+               <table class="data-table">
+                   <colgroup> <col style="width: 20%;"> <col style="width: 45%;"> <col style="width: 15%;"> <col style="width: 20%;"> </colgroup>
+                   <thead> <tr> <th style="text-align: center;">配件类型</th> <th>规格 / 型号</th> <th style="text-align: right;">数量</th> <th style="text-align: center;">操作</th> </tr> </thead>
+                   <tbody>
+                       ${CONFIG_ROWS.map(renderConfigRow).join('')}
+                       ${state.customItems.map(renderCustomItemRow).join('')}
+                       ${renderAddCategoryRow()}
+                   </tbody>
+               </table>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 2rem; margin-bottom: 4rem;">
+                <div class="eco-card" style="margin: 0; display: flex; flex-direction: column;">
+                    <div style="padding: 1rem 1.5rem; background: var(--bg-alt); border-bottom: 1px solid var(--border-color);">
+                        <label for="final-config-display" class="text-xs-bold text-muted">最终配置预览</label>
+                    </div>
+                    <textarea id="final-config-display" style="flex: 1; width: 100%; resize: none; border: none; padding: 1.5rem; font-family: monospace; font-size: 0.9rem; line-height: 1.6; outline: none; background: white;" readonly placeholder="配置清单将在此处生成...">${finalConfigText}</textarea>
                 </div>
-                <div class="final-config-section" style="margin-top: 2rem;">
-                   <label for="final-config-display" style="font-weight: 600;">最终配置预览</label>
-                   <textarea id="final-config-display" class="form-input" style="margin-top: 0.5rem; background-color: var(--secondary-color);" readonly placeholder="选择配件后在此处生成配置清单...">${finalConfigText}</textarea>
-               </div>
-               <div class="controls-grid">
-                   <div class="control-group">
-                       <label for="discount-select">折扣优惠</label>
-                       <select id="discount-select" class="form-select">
-                           <option value="none" ${state.selectedDiscountId === 'none' ? 'selected' : ''}>无折扣</option>
-                           ${state.priceData.tieredDiscounts.sort((a, b) => b.threshold - a.threshold).map(tier => `
-                               <option value="${tier.id}" ${state.selectedDiscountId === tier.id ? 'selected' : ''}>
-                                   ${tier.threshold > 0 ? `满 ${tier.threshold} 件 - ${tier.rate} 折` : `固定折扣 - ${tier.rate} 折`}
-                               </option>
-                           `).join('')}
-                       </select>
+
+                <div class="eco-card" style="margin: 0; padding: 1.5rem;">
+                    <div style="display: flex; flex-direction: column; gap: 1.5rem;">
+                        <div>
+                            <label for="discount-select" class="text-xs-bold text-muted" style="display: block; margin-bottom: 0.5rem;">折扣优惠</label>
+                            <select id="discount-select" class="form-select">
+                                <option value="none" ${state.selectedDiscountId === 'none' ? 'selected' : ''}>标准价格</option>
+                                ${state.priceData.tieredDiscounts.sort((a, b) => b.threshold - a.threshold).map(tier => `
+                                    <option value="${tier.id}" ${state.selectedDiscountId === tier.id ? 'selected' : ''}>
+                                        ${tier.threshold > 0 ? `满 ${tier.threshold} 台 (${tier.rate}折)` : `固定折扣: ${tier.rate}折`}
+                                    </option>
+                                `).join('')}
+                            </select>
+                        </div>
+                        <div>
+                            <label for="markup-points-select" class="text-xs-bold text-muted" style="display: block; margin-bottom: 0.5rem;">利润点位</label>
+                            <select id="markup-points-select" class="form-select">
+                                ${state.priceData.markupPoints.map(point => `<option value="${point.id}" ${state.markupPoints === point.id ? 'selected' : ''}>${point.alias}</option>`).join('')}
+                            </select>
+                        </div>
+                        <div>
+                            <label for="special-discount-input" class="text-xs-bold text-muted" style="display: block; margin-bottom: 0.5rem;">额外立减 (¥)</label>
+                            <input type="number" id="special-discount-input" class="form-input" value="${state.specialDiscount > 0 ? state.specialDiscount : ''}" placeholder="0" />
+                        </div>
+                    </div>
+                </div>
+            </div>
+       </main>
+
+       <footer class="glass-footer">
+           <div style="display: flex; align-items: center; gap: 2rem;">
+               <div style="display: flex; flex-direction: column; gap: 0.25rem; visibility: ${finalPriceVisibility}; opacity: ${finalPriceOpacity}; transition: opacity 0.3s ease;">
+                   <span class="text-xs-bold text-muted">预估总报价 ${state.globalQuantity > 1 ? `<span style="font-weight:normal; color:var(--text-400);">(共 ${state.globalQuantity} 台)</span>` : ''}</span>
+                   <div style="display: flex; align-items: baseline; gap: 0.75rem;">
+                       <strong style="font-size: 2.25rem; color: var(--text-900); line-height: 1;">¥ ${totals.finalPrice.toFixed(2)}</strong>
+                       <span class="badge badge-green">
+                            <span class="material-symbols-outlined" style="font-size: 12px; margin-right: 2px;">trending_down</span> 
+                            已优化
+                       </span>
                    </div>
-                   <div class="control-group">
-                       <label for="markup-points-select">利润点位</label>
-                       <select id="markup-points-select" class="form-select">
-                           ${state.priceData.markupPoints.map(point => `<option value="${point.id}" ${state.markupPoints === point.id ? 'selected' : ''}>${point.alias.split('(')[0].trim()}</option>`).join('')}
-                       </select>
-                   </div>
-                   <div class="control-group">
-                       <label for="special-discount-input">特别立减 (元)</label>
-                       <input type="number" id="special-discount-input" class="form-input" value="${state.specialDiscount > 0 ? state.specialDiscount : ''}" placeholder="0" />
-                   </div>
                </div>
-           </main>
-           <footer class="app-footer">
-               <div class="final-price-display" style="visibility: ${finalPriceVisibility}; opacity: ${finalPriceOpacity}; transition: opacity 0.3s ease;">
-                   <span>最终报价:</span>
-                   <strong>¥ ${totals.finalPrice.toFixed(2)}</strong>
+           </div>
+           
+           <div class="footer-buttons" style="display: flex; gap: 1rem; align-items: center;">
+               
+               <!-- Quantity Control -->
+               <div style="display: flex; align-items: center; background: white; border: 1px solid var(--border-color); border-radius: 0.75rem; padding: 2px; margin-right: 1rem;">
+                   <span class="text-xs-bold text-muted" style="padding-left: 0.75rem; padding-right: 0.5rem; font-size: 0.7rem;">数量</span>
+                   <button class="btn btn-icon" id="qty-minus" style="width: 2rem; height: 2rem; border-radius: 0.5rem;"><span class="material-symbols-outlined" style="font-size: 1rem;">remove</span></button>
+                   <input type="number" id="global-qty-input" value="${state.globalQuantity}" min="1" style="width: 3rem; text-align: center; border: none; font-weight: 600; color: var(--text-900); background: transparent; outline: none; -moz-appearance: textfield;">
+                   <button class="btn btn-icon" id="qty-plus" style="width: 2rem; height: 2rem; border-radius: 0.5rem;"><span class="material-symbols-outlined" style="font-size: 1rem;">add</span></button>
                </div>
-               <div class="footer-buttons">
-                   <button class="btn btn-ghost" id="reset-btn">重置</button>
-                   <button class="btn btn-secondary" id="generate-quote-btn">📥 导出 Excel</button>
-                   <button class="btn btn-primary" id="calc-quote-btn">💰 生成报价</button>
-               </div>
-           </footer>
-       </div>
+
+               <button class="btn btn-ghost" id="reset-btn">
+                    <span class="material-symbols-outlined">restart_alt</span> 重置
+               </button>
+               <button class="btn btn-secondary" id="generate-quote-btn">
+                    <span class="material-symbols-outlined">file_download</span> 导出 Excel
+               </button>
+               <button class="btn btn-primary" id="calc-quote-btn" style="padding: 0.75rem 2rem; font-size: 1rem;">
+                    计算报价 <span class="material-symbols-outlined">payments</span>
+               </button>
+           </div>
+       </footer>
    `;
 }
 
 function renderConfigRow(category: string) {
     const dataCategory = category.startsWith('硬盘') ? '硬盘' : category;
-    
-    // Get all items for this category
     const allItems = state.priceData.items.filter(i => i.category === dataCategory);
-    
-    // Get currently selected host model to filter compatibility
     const selectedHostModel = state.selection['主机']?.model;
-    
-    // Filter logic:
-    // 1. If category is '主机', show all options.
-    // 2. If no host is selected, show all options (or universal ones). Here we show all to be safe.
-    // 3. If host is selected, check 'compatible_hosts'.
-    //    - If compatible_hosts is null/empty -> Universal item, show it.
-    //    - If compatible_hosts has values -> Show only if selected host is in the list.
     const filteredItems = allItems.filter(item => {
         if (dataCategory === '主机') return true;
-        
-        // If no specific host is selected, we could show everything, OR show only universal items.
-        // Usually, users want to see everything until they narrow it down.
         if (!selectedHostModel) return true;
-        
-        if (!item.compatible_hosts || item.compatible_hosts.length === 0) {
-            return true; // Universal item
-        }
-        
+        if (!item.compatible_hosts || item.compatible_hosts.length === 0) return true;
         return item.compatible_hosts.includes(selectedHostModel);
     });
 
-    // Extract models and sort
     const availableModels = filteredItems.map(i => i.model).sort();
-    
     const currentSelection = state.selection[category];
     return `
        <tr data-category="${category}">
-           <td>${category}</td>
+           <td style="text-align: center;">
+               <div style="display: flex; align-items: center; justify-content: center; gap: 0.75rem;">
+                   <div style="width: 6px; height: 6px; border-radius: 50%; background: var(--border-color);"></div>
+                   <strong>${category}</strong>
+               </div>
+           </td>
            <td>
                <select class="form-select model-select">
                    <option value="">-- 请选择 --</option>
                    ${availableModels.map(model => `<option value="${model}" ${currentSelection.model === model ? 'selected' : ''}>${model}</option>`).join('')}
                </select>
            </td>
-           <td> <input type="number" class="form-input quantity-input" min="0" value="${currentSelection.quantity}" /> </td>
-           <td> <button class="btn btn-ghost remove-item-btn" disabled style="opacity: 0.3;">&times;</button> </td>
+           <td style="text-align: right;"> <input type="number" class="form-input quantity-input" min="0" value="${currentSelection.quantity}" style="text-align: right;" /> </td>
+           <td style="text-align: center;"> 
+               <button class="btn btn-icon remove-item-btn" disabled style="opacity: 0.3;">
+                    <span class="material-symbols-outlined" style="font-size: 1.25rem;">close</span>
+               </button> 
+           </td>
        </tr>
    `;
 }
@@ -263,8 +359,14 @@ function renderCustomItemRow(item: CustomItem) {
     const hasModels = modelKeys.length > 0;
 
     return `
-       <tr data-custom-id="${item.id}">
-           <td>${item.category}</td>
+       <tr data-custom-id="${item.id}" style="background: var(--bg-alt);">
+           <td style="text-align: center;">
+               <div style="display: flex; align-items: center; justify-content: center; gap: 0.75rem;">
+                   <div style="width: 6px; height: 6px; border-radius: 50%; background: var(--primary);"></div>
+                   <strong>${item.category}</strong>
+                   <span class="badge badge-gray">自定义</span>
+               </div>
+           </td>
            <td>
                ${hasModels ? `
                <select class="form-select custom-model-select">
@@ -272,54 +374,52 @@ function renderCustomItemRow(item: CustomItem) {
                    ${modelKeys.sort().map(model => `<option value="${model}" ${item.model === model ? 'selected' : ''}>${model}</option>`).join('')}
                </select>
                ` : `
-               <input type="text" class="form-input custom-model-input" placeholder="请输入型号" value="${item.model}" />
+               <input type="text" class="form-input custom-model-input" placeholder="输入规格参数..." value="${item.model}" />
                `}
            </td>
-           <td> <input type="number" class="form-input custom-quantity-input" min="0" value="${item.quantity}" /> </td>
-           <td> <button class="btn btn-danger remove-custom-item-btn" title="删除此行">&times;</button> </td>
+           <td style="text-align: right;"> <input type="number" class="form-input custom-quantity-input" min="0" value="${item.quantity}" style="text-align: right;" /> </td>
+           <td style="text-align: center;"> 
+               <button class="btn btn-icon remove-custom-item-btn" style="color: var(--danger-text);" title="删除">
+                    <span class="material-symbols-outlined" style="font-size: 1.25rem;">delete</span>
+               </button> 
+           </td>
        </tr>
    `;
 }
 
 function renderAddCategoryRow() {
-    // Identify available categories in backend that are NOT in the standard config
     const standardCategories = ['主机', 'CPU', '内存', '硬盘', '显卡', '电源', '显示器'];
-    // '硬盘' in DB covers '硬盘1','硬盘2' in standard config, so we exclude it safely by name match.
-    // If DB has categories like '机箱', '键盘' etc., they will appear here.
-    
     const allCategories = Array.from(new Set(state.priceData.items.map(i => i.category)));
     const extraCategories = allCategories.filter(c => !standardCategories.includes(c));
-    
-    // Logic: 
-    // If we have extra categories, show a select box. 
-    // Include a "Custom" option in the select box.
-    // If "Custom" is selected (or no extras exist), show the input box.
-    
     const hasExtras = extraCategories.length > 0;
     const showInput = !hasExtras || state.isNewCategoryCustom;
 
     let selectorHtml = '';
     if (hasExtras) {
         selectorHtml = `
-            <select id="new-category-select" class="form-select" style="flex: 1; min-width: 140px; margin-right: 0.5rem;">
-                <option value="">-- 选择配件类型 --</option>
+            <select id="new-category-select" class="form-select" style="flex: 1; min-width: 140px; margin-right: 0.5rem; background: white;">
+                <option value="">-- 选择分类 --</option>
                 ${extraCategories.map(c => `<option value="${c}" ${(!state.isNewCategoryCustom && state.newCategory === c) ? 'selected' : ''}>${c}</option>`).join('')}
-                <option value="custom" ${state.isNewCategoryCustom ? 'selected' : ''}>✎ 自定义输入...</option>
+                <option value="custom" ${state.isNewCategoryCustom ? 'selected' : ''}>+ 自定义输入...</option>
             </select>
         `;
     }
 
     return `
-       <tr id="add-category-row" style="background-color: var(--secondary-color);">
-           <td style="color: var(--text-color-secondary); font-weight: 500;">+ 添加新类别</td>
-           <td> 
-               <div style="display: flex; align-items: center; width: 100%;">
-                   ${selectorHtml}
-                   ${showInput ? `<input type="text" id="new-category-input" class="form-input" placeholder="输入类别名称 (例如: 机箱风扇)" value="${state.newCategory}" style="flex: 1;" autofocus />` : ''}
+       <tr id="add-category-row">
+           <td colspan="4" style="padding: 1rem 1.5rem;">
+               <div style="display: flex; align-items: center; gap: 1rem; background: var(--bg-alt); padding: 0.75rem; border-radius: var(--radius-md); border: 1px dashed var(--border-color);">
+                   <span class="text-xs-bold text-muted" style="white-space: nowrap;">添加新配件</span>
+                   <div style="height: 24px; width: 1px; background: var(--border-color);"></div>
+                   <div style="flex: 1; display: flex; gap: 0.5rem;">
+                       ${selectorHtml}
+                       ${showInput ? `<input type="text" id="new-category-input" class="form-input" placeholder="类别名称 (如: 机箱风扇)" value="${state.newCategory}" style="flex: 1; background: white;" />` : ''}
+                   </div>
+                   <button id="add-category-btn" class="btn btn-secondary" style="height: 2.25rem;">
+                       <span class="material-symbols-outlined">add</span> 添加
+                   </button>
                </div>
            </td>
-           <td></td>
-           <td> <button id="add-category-btn" class="btn btn-primary" style="width: 100%;">确认添加</button> </td>
        </tr>
    `;
 }
@@ -335,20 +435,24 @@ export function renderAdminDataTableBody() {
         return a.model.localeCompare(b.model);
     });
 
-    if (filteredItems.length === 0) return `<tr><td colspan="5" style="text-align:center; padding: 3rem; color: var(--text-color-secondary);">未找到匹配项</td></tr>`;
+    if (filteredItems.length === 0) return `<tr><td colspan="5" style="text-align:center; padding: 3rem; color: var(--text-500);">未找到匹配的商品。</td></tr>`;
 
     return filteredItems.map(item => `
         <tr data-id="${item.id}" data-category="${item.category}" data-model="${item.model}">
-            <td>${item.category}</td> 
-            <td>${item.model}</td>
-            <td><input type="number" class="form-input price-input" value="${item.price}" /></td>
+            <td><strong>${item.category}</strong></td> 
+            <td style="color: var(--text-500);">${item.model}</td>
+            <td><input type="number" class="form-input price-input" value="${item.price}" style="width: 100px;" /></td>
             <td style="text-align: center;">
-                <input type="checkbox" class="priority-checkbox" ${item.is_priority ? 'checked' : ''} title="勾选后，智能推荐将优先选择此配件">
+                <input type="checkbox" class="priority-checkbox" ${item.is_priority ? 'checked' : ''} style="width:18px; height:18px; accent-color:var(--primary); cursor: pointer;">
             </td>
-            <td class="actions-cell">
-                <button class="btn btn-primary admin-save-item-btn">保存</button>
-                <button class="btn btn-info admin-adapter-btn" data-id="${item.id}">适配</button>
-                <button class="btn btn-danger admin-delete-item-btn" data-category="${item.category}" data-model="${item.model}">删除</button>
+            <td class="actions-cell" style="text-align: right;">
+                <div style="display: flex; gap: 0.5rem; justify-content: flex-end;">
+                    <button class="btn btn-secondary admin-save-item-btn" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;">保存</button>
+                    <button class="btn btn-secondary admin-adapter-btn" data-id="${item.id}" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;">适配</button>
+                    <button class="btn btn-icon admin-delete-item-btn" data-category="${item.category}" data-model="${item.model}" style="color: var(--danger-text);">
+                        <span class="material-symbols-outlined" style="font-size: 1.2rem;">delete</span>
+                    </button>
+                </div>
             </td>
         </tr>`
     ).join('');
@@ -356,182 +460,229 @@ export function renderAdminDataTableBody() {
 
 function renderAdminPanel() {
     return `
-   <div class="app-layout">
-       <header class="app-header">
-           <h2>系统管理后台</h2>
-           <div class="header-actions">
-               <button id="admin-change-password-btn" class="header-btn">修改密码</button>
-               <button id="back-to-quote-btn" class="header-btn">返回报价首页</button>
+       <header class="glass-header">
+           <div class="header-brand">
+               <div class="header-icon-box" style="background: var(--text-900);">
+                    <span class="material-symbols-outlined">admin_panel_settings</span>
+               </div>
+               <div>
+                    <div class="header-title">后台管理</div>
+                    <span class="header-subtitle">配置与库存管理</span>
+               </div>
            </div>
+           
+           <nav class="header-nav">
+               <button class="btn btn-secondary" id="back-to-quote-btn">
+                    <span class="material-symbols-outlined">arrow_back</span> 返回报价
+               </button>
+           </nav>
        </header>
+
        <main class="app-body">
-           <div class="admin-section">
-               <div class="admin-section-header">点位管理</div>
-               <div class="admin-section-body">
-                    <p>设置不同的利润点位，报价时可快速切换。</p>
-                   <div id="markup-points-list">
-                       ${state.priceData.markupPoints.sort((a, b) => a.value - b.value).map(point => `
-                           <div class="admin-row" data-id="${point.id}">
-                               <input type="text" class="form-input" value="${point.alias}" placeholder="别名" style="flex-grow: 1;">
-                               <input type="number" class="form-input" value="${point.value}" placeholder="点数" style="width: 80px;">
-                               <span>%</span>
-                               <button class="btn btn-danger remove-markup-point-btn" data-id="${point.id}">删除</button>
-                           </div>
-                       `).join('')}
+           <!-- Metrics Grid for Config -->
+           <div class="admin-metrics-grid">
+               <div class="eco-card" style="margin: 0; padding: 0;">
+                   <div class="section-header" style="margin: 0; padding: 1.25rem; border-bottom: 1px solid var(--border-color);">
+                        <div class="section-title" style="font-size: 1rem;">利润点位管理</div>
                    </div>
-                    <div id="add-markup-point-btn" class="add-new-placeholder" style="margin-top: 1rem;">+ 添加新点位</div>
-               </div>
-           </div>
-           <div class="admin-section">
-               <div class="admin-section-header">折扣阶梯管理</div>
-               <div class="admin-section-body">
-                   <p>设置数量阶梯折扣，系统将根据数量自动匹配或手动选择。</p>
-                   <div id="tiered-discount-list">
-                       ${state.priceData.tieredDiscounts.sort((a, b) => a.threshold - b.threshold).map(tier => `
-                           <div class="admin-row" data-id="${tier.id}">
-                               <span>满</span> <input type="number" class="form-input" value="${tier.threshold}" placeholder="数量" style="width: 80px;">
-                               <span>件, 打</span> <input type="number" step="0.1" class="form-input" value="${tier.rate}" placeholder="折扣率" style="width: 80px;">
-                               <span>折</span> <button class="btn btn-danger remove-tier-btn" data-id="${tier.id}">删除</button>
-                           </div>
-                       `).join('')}
-                   </div>
-                    <div id="add-tier-btn" class="add-new-placeholder" style="margin-top: 1rem;">+ 添加新折扣阶梯</div>
-               </div>
-           </div>
-           <div class="admin-section">
-                <div class="admin-section-header">快速录入</div>
-               <div class="admin-section-body">
-                   <form id="quick-add-form" class="admin-row" style="align-items: stretch;">
-                        <input type="text" id="quick-add-category-input" class="form-input" placeholder="分类 (如: 显卡)" style="flex: 1; min-width: 100px;" />
-                        <input type="text" id="quick-add-model" class="form-input" placeholder="型号名称" style="flex: 2; min-width: 200px;" />
-                        <input type="number" id="quick-add-price" class="form-input" placeholder="成本价" style="width: 100px;" />
-                        <button type="submit" id="quick-add-btn" class="btn btn-primary">添加</button>
-                   </form>
-                   <div class="import-section" style="margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px dashed var(--border-color);">
-                       <input type="file" id="import-file-input" accept=".xlsx, .xls" style="display: none;" />
-                       <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
-                            <button id="export-excel-btn" class="btn btn-secondary" style="border: 1px dashed var(--border-color); justify-content: center;">📤 导出配件 (Excel)</button>
-                            <button id="import-excel-btn" class="btn btn-ghost" style="border: 1px dashed var(--border-color); justify-content: center;">📄 导入更新 (Excel)</button>
+                   <div style="padding: 1.25rem;">
+                       <div id="markup-points-list" style="display: flex; flex-direction: column; gap: 0.75rem;">
+                           ${state.priceData.markupPoints.sort((a, b) => a.value - b.value).map(point => `
+                               <div class="admin-row" data-id="${point.id}" style="display: flex; gap: 0.5rem; align-items: center;">
+                                   <input type="text" class="form-input" value="${point.alias}" style="flex: 1; height: 2.25rem;">
+                                   <div style="display: flex; align-items: center; gap: 0.25rem;">
+                                       <input type="number" class="form-input" value="${point.value}" style="width: 60px; height: 2.25rem; text-align: right;">
+                                       <span style="font-size: 0.8rem; color: var(--text-500);">%</span>
+                                   </div>
+                                   <button class="btn btn-icon remove-markup-point-btn" data-id="${point.id}" style="width: 24px; height: 24px;">
+                                       <span class="material-symbols-outlined" style="font-size: 1.1rem;">close</span>
+                                   </button>
+                               </div>
+                           `).join('')}
                        </div>
-                       <div style="margin-top: 0.8rem; font-size: 0.85rem; color: var(--text-color-secondary);">
-                           <span id="file-name-display"></span>
-                           <p style="margin: 0.5rem 0 0 0; line-height: 1.4;">
-                               💡 <strong>提示:</strong> 您可以先点击“导出”，在 Excel 中修改价格或添加新行（保持分类、型号、价格三列格式），然后重新“导入”以批量更新系统数据。
-                           </p>
+                       <button id="add-markup-point-btn" class="btn btn-ghost" style="width: 100%; margin-top: 1rem; border: 1px dashed var(--border-color); font-size: 0.8rem;">+ 添加点位</button>
+                   </div>
+               </div>
+
+               <div class="eco-card" style="margin: 0; padding: 0;">
+                   <div class="section-header" style="margin: 0; padding: 1.25rem; border-bottom: 1px solid var(--border-color);">
+                        <div class="section-title" style="font-size: 1rem;">批量折扣管理</div>
+                   </div>
+                   <div style="padding: 1.25rem;">
+                       <div id="tiered-discount-list" style="display: flex; flex-direction: column; gap: 0.75rem;">
+                           ${state.priceData.tieredDiscounts.sort((a, b) => a.threshold - b.threshold).map(tier => `
+                               <div class="admin-row" data-id="${tier.id}" style="display: flex; gap: 0.5rem; align-items: center; font-size: 0.9rem;">
+                                   <span class="text-muted">满</span> 
+                                   <input type="number" class="form-input" value="${tier.threshold}" style="width: 60px; height: 2.25rem;">
+                                   <span class="text-muted">件</span> 
+                                   <input type="number" step="0.1" class="form-input" value="${tier.rate}" style="width: 60px; height: 2.25rem;">
+                                   <span class="text-muted">折</span>
+                                   <button class="btn btn-icon remove-tier-btn" data-id="${tier.id}" style="width: 24px; height: 24px; margin-left: auto;">
+                                       <span class="material-symbols-outlined" style="font-size: 1.1rem;">close</span>
+                                   </button>
+                               </div>
+                           `).join('')}
+                       </div>
+                       <button id="add-tier-btn" class="btn btn-ghost" style="width: 100%; margin-top: 1rem; border: 1px dashed var(--border-color); font-size: 0.8rem;">+ 添加折扣阶梯</button>
+                   </div>
+               </div>
+               
+               <div class="eco-card" style="margin: 0; padding: 0; grid-column: 1 / -1;">
+                    <div class="section-header" style="margin: 0; padding: 1.25rem; border-bottom: 1px solid var(--border-color);">
+                        <div class="section-title" style="font-size: 1rem;">快速添加配件</div>
+                   </div>
+                   <div style="padding: 1.25rem;">
+                        <form id="quick-add-form" style="display: flex; gap: 1rem; flex-wrap: wrap;">
+                            <input type="text" id="quick-add-category-input" class="form-input" placeholder="分类 (如: 显卡)" style="flex: 1; min-width: 150px;" />
+                            <input type="text" id="quick-add-model" class="form-input" placeholder="型号名称" style="flex: 2; min-width: 200px;" />
+                            <input type="number" id="quick-add-price" class="form-input" placeholder="成本价" style="width: 120px;" />
+                            <button type="submit" id="quick-add-btn" class="btn btn-primary">添加商品</button>
+                       </form>
+                        <div style="margin-top: 1.5rem; padding-top: 1rem; border-top: 1px dashed var(--border-color); display: flex; gap: 1rem;">
+                           <input type="file" id="import-file-input" accept=".xlsx, .xls" style="display: none;" />
+                           <button id="import-excel-btn" class="btn btn-secondary" style="flex: 1;">
+                                <span class="material-symbols-outlined">upload_file</span> 导入 Excel
+                           </button>
+                           <button id="export-excel-btn" class="btn btn-secondary" style="flex: 1;">
+                                <span class="material-symbols-outlined">download</span> 导出 Excel
+                           </button>
                        </div>
                    </div>
                </div>
            </div>
-           <div class="admin-section">
-               <div class="admin-section-header">现有库存维护</div>
-               <div class="admin-section-body">
-                   <input type="search" id="admin-search-input" class="form-input" placeholder="🔍 输入型号或分类名称搜索..." value="${state.adminSearchTerm}" style="margin-bottom: 1.5rem;" />
-                   <div class="data-table-container">
-                       <table class="data-table">
-                            <thead> <tr> <th>分类</th> <th>型号</th> <th>单价</th> <th style="text-align: center;">优先推荐</th> <th>操作</th> </tr> </thead>
-                           <tbody id="admin-data-table-body">${renderAdminDataTableBody()}</tbody>
-                       </table>
+
+           <!-- Inventory Table -->
+           <div class="eco-card">
+               <div class="section-header" style="padding: 1.5rem; margin: 0; border-bottom: 1px solid var(--border-color);">
+                   <div class="section-title">
+                       <div class="section-icon purple">
+                           <span class="material-symbols-outlined">inventory_2</span>
+                       </div>
+                       配件管理
+                   </div>
+                   <div style="position: relative; width: 300px;">
+                        <span class="material-symbols-outlined" style="position: absolute; left: 10px; top: 10px; color: var(--text-400);">search</span>
+                        <input type="search" id="admin-search-input" class="form-input" placeholder="搜索配件..." value="${state.adminSearchTerm}" style="padding-left: 2.5rem;" />
                    </div>
                </div>
+               
+               <table class="data-table">
+                    <thead> <tr> <th>分类</th> <th>型号</th> <th>单价</th> <th style="text-align: center;">优先</th> <th style="text-align: right;">操作</th> </tr> </thead>
+                   <tbody id="admin-data-table-body">${renderAdminDataTableBody()}</tbody>
+               </table>
            </div>
        </main>
-   </div>
    `;
 }
 
 function renderLoginLogPanel() {
     return `
-   <div class="app-layout">
-       <header class="app-header">
-           <h2>登录日志审计</h2>
-           <div class="header-actions"> <button id="back-to-quote-btn" class="header-btn">返回报价首页</button> </div>
+       <header class="glass-header">
+           <div class="header-brand">
+               <div class="header-icon-box" style="background: var(--text-900);">
+                    <span class="material-symbols-outlined">security</span>
+               </div>
+               <div class="header-title">安全日志</div>
+           </div>
+           <nav class="header-nav">
+               <button class="btn btn-secondary" id="back-to-quote-btn">返回</button>
+           </nav>
        </header>
+
        <main class="app-body">
-            <div class="admin-section">
-                <div class="admin-section-header">🤖 AI 智能日志分析</div>
-                <div class="admin-section-body">
-                    <div id="log-summary-loading" style="display: block; color: var(--text-color-secondary);"> <span class="spinner" style="border-color: #94a3b8; border-top-color: transparent;"></span> 正在分析最近的登录行为...</div>
-                    <div id="log-summary-content" style="display: none; line-height: 1.7;"></div>
+            <div class="eco-card ai-feature">
+                <div class="section-header" style="margin-bottom: 1rem; padding: 0;">
+                    <div class="section-title">AI 智能分析</div>
                 </div>
+                <div id="log-summary-loading" style="display: block; color: var(--text-500);"> 
+                    <div class="loading-spinner" style="width:20px; height:20px; display:inline-block; vertical-align:middle; border-width: 2px;"></div> 
+                    正在分析数据模式...
+                </div>
+                <div id="log-summary-content" style="display: none; line-height: 1.7; color: var(--text-700);"></div>
             </div>
-            <div class="admin-section">
-                <div class="admin-section-header">详细记录 (最近100条)</div>
-                <div class="admin-section-body" style="padding: 0;">
-                    <div class="data-table-container" style="border: none; box-shadow: none;">
-                       <table class="data-table">
-                           <thead> <tr> <th>用户名</th> <th>登录时间</th> </tr> </thead>
-                           <tbody>
-                               ${state.loginLogs.map(log => `
-                                   <tr>
-                                       <td>${log.user_name || '未知用户'}</td>
-                                       <td>${new Date(log.login_at).toLocaleString('zh-CN')}</td>
-                                   </tr>`).join('')}
-                               ${state.loginLogs.length === 0 ? '<tr><td colspan="2" style="text-align: center; padding: 2rem; color: #94a3b8;">暂无日志记录。</td></tr>' : ''}
-                           </tbody>
-                       </table>
-                    </div>
+
+            <div class="eco-card">
+                <div class="section-header" style="padding: 1.5rem; margin: 0; border-bottom: 1px solid var(--border-color);">
+                    <div class="section-title">最近访问记录</div>
                 </div>
+                <table class="data-table">
+                   <thead> <tr> <th>用户</th> <th>访问时间</th> </tr> </thead>
+                   <tbody>
+                       ${state.loginLogs.map(log => `
+                           <tr>
+                               <td><strong>${log.user_name || '未知'}</strong></td>
+                               <td class="text-muted">${new Date(log.login_at).toLocaleString('zh-CN')}</td>
+                           </tr>`).join('')}
+                       ${state.loginLogs.length === 0 ? '<tr><td colspan="2" style="text-align: center; padding: 2rem; color: var(--text-500);">暂无日志记录。</td></tr>' : ''}
+                   </tbody>
+               </table>
            </div>
        </main>
-   </div>
    `;
 }
 
 function renderUserManagementPanel() {
     return `
-   <div class="app-layout">
-        <header class="app-header">
-            <h2>用户账户管理</h2>
-            <div class="header-actions">
-                <button id="add-new-user-btn" class="header-btn-blue">添加新用户</button>
-                <button id="back-to-quote-btn" class="header-btn">返回报价首页</button>
-            </div>
-        </header>
+       <header class="glass-header">
+           <div class="header-brand">
+               <div class="header-icon-box" style="background: var(--text-900);">
+                    <span class="material-symbols-outlined">group</span>
+               </div>
+               <div class="header-title">用户管理</div>
+           </div>
+           <nav class="header-nav">
+               <button id="add-new-user-btn" class="btn btn-primary">+ 新建用户</button>
+               <button class="btn btn-secondary" id="back-to-quote-btn">返回</button>
+           </nav>
+       </header>
+
        <main class="app-body">
-            <div class="data-table-container">
+            <div class="eco-card">
                <table class="data-table">
-                   <thead> <tr> <th>员工姓名</th> <th>角色</th> <th>状态</th> <th>操作</th> </tr> </thead>
+                   <thead> <tr> <th>姓名</th> <th>角色</th> <th>状态</th> <th style="text-align: right;">操作</th> </tr> </thead>
                    <tbody>
                         ${state.profiles.map(profile => {
                             let roleBadgeHtml = '';
                             switch(profile.role) {
-                                case 'admin': roleBadgeHtml = `<span class="role-badge role-badge-admin">管理员</span>`; break;
-                                case 'manager': roleBadgeHtml = `<span class="role-badge role-badge-manager">后台经理</span>`; break;
-                                default: roleBadgeHtml = `<span class="role-badge" style="background:var(--secondary-color); color:#475569">销售人员</span>`;
+                                case 'admin': roleBadgeHtml = `<span class="badge" style="background:#dcfce7; color:#166534;">ADMIN</span>`; break;
+                                case 'manager': roleBadgeHtml = `<span class="badge" style="background:#f3e8ff; color:#6b21a8;">MANAGER</span>`; break;
+                                default: roleBadgeHtml = `<span class="badge badge-gray">SALES</span>`;
                             }
 
-                            const statusBadgeHtml = profile.is_approved ? `<span class="status-badge status-badge-approved">正常</span>` : `<span class="status-badge status-badge-pending">待审批</span>`;
+                            const statusBadgeHtml = profile.is_approved ? 
+                                `<span class="badge badge-green">正常</span>` : 
+                                `<span class="badge badge-orange">待审核</span>`;
+                                
                             const isCurrentUser = profile.id === state.currentUser?.id;
                             let actionsHtml = '';
 
                             if (isCurrentUser) {
-                                actionsHtml = '<span style="color: var(--text-color-secondary); font-size: 0.85rem; padding: 0.4rem;">(当前登录)</span>';
+                                actionsHtml = '<span class="text-muted text-xs-bold">(您)</span>';
                             } else {
-                                const approveButton = !profile.is_approved ? `<button class="btn btn-primary approve-user-btn" style="font-size:0.8rem; padding:0.3rem 0.6rem;">批准</button>` : '';
+                                const approveButton = !profile.is_approved ? `<button class="btn btn-secondary approve-user-btn" style="height: 2rem; font-size: 0.75rem;">批准</button>` : '';
                                 const permissionButton = profile.role === 'manager'
-                                    ? `<button class="btn btn-secondary permission-toggle-btn" data-action="revoke" style="font-size:0.8rem; padding:0.3rem 0.6rem;">降为销售</button>`
-                                    : `<button class="btn btn-secondary permission-toggle-btn" data-action="grant" style="font-size:0.8rem; padding:0.3rem 0.6rem;">升为经理</button>`;
-                                const deleteButton = `<button class="btn btn-danger delete-user-btn" style="font-size:0.8rem; padding:0.3rem 0.6rem;">删除</button>`;
+                                    ? `<button class="btn btn-ghost permission-toggle-btn" data-action="revoke" style="height: 2rem; font-size: 0.75rem;">降级</button>`
+                                    : `<button class="btn btn-ghost permission-toggle-btn" data-action="grant" style="height: 2rem; font-size: 0.75rem;">提升</button>`;
+                                const deleteButton = `<button class="btn btn-icon delete-user-btn" style="color: var(--danger-text); width: 2rem; height: 2rem;"><span class="material-symbols-outlined" style="font-size: 1.1rem;">delete</span></button>`;
                                 const finalPermissionButton = profile.role !== 'admin' ? permissionButton : '';
-                                actionsHtml = [approveButton, finalPermissionButton, deleteButton].filter(Boolean).join(' ');
+                                actionsHtml = `<div style="display:flex; justify-content:flex-end; gap:0.5rem; align-items:center;">${approveButton}${finalPermissionButton}${deleteButton}</div>`;
                             }
 
                             return `
                             <tr data-user-id="${profile.id}" data-user-role="${profile.role}">
                                 <td>
-                                    <div style="font-weight:600; color:#334155">${profile.full_name || '未命名'}</div>
+                                    <div style="font-weight:600;">${profile.full_name || '未命名'}</div>
                                 </td>
                                 <td>${roleBadgeHtml}</td>
                                 <td>${statusBadgeHtml}</td>
                                 <td class="actions-cell">${actionsHtml}</td>
                             </tr>`;
                         }).join('')}
-                        ${state.profiles.length === 0 ? '<tr><td colspan="4" style="text-align: center; padding: 3rem; color: #94a3b8;">暂无用户数据。</td></tr>' : ''}
+                        ${state.profiles.length === 0 ? '<tr><td colspan="4" style="text-align: center; padding: 3rem; color: var(--text-500);">未找到用户。</td></tr>' : ''}
                    </tbody>
                </table>
            </div>
        </main>
-   </div>
    `;
 }
 
@@ -555,29 +706,18 @@ export function showModal(options: Partial<CustomModalState>) {
 
 export function updateTotalsUI() {
     const totals = calculateTotals();
-    const finalPriceEl = $('.final-price-display strong');
-    const finalConfigEl = $('.final-config-display');
+    const finalPriceEl = $('.glass-footer strong'); // Updated selector
+    const finalConfigEl = $('#final-config-display');
 
     if (finalPriceEl) {
         finalPriceEl.textContent = `¥ ${totals.finalPrice.toFixed(2)}`;
     }
 
     if (finalConfigEl) {
-        (finalConfigEl as HTMLTextAreaElement).value = getFinalConfigText() || '未选择配件';
+        (finalConfigEl as HTMLTextAreaElement).value = getFinalConfigText() || '未选择任何配件。';
     }
 }
 
 export function setSyncStatus(status: AppState['syncStatus'], duration = 1500) {
     state.syncStatus = status;
-    const statusEl = $('#sync-status');
-    if (statusEl) {
-        const syncStatusMessages = { idle: '', saving: '正在保存...', saved: '已同步 ✓', error: '保存出错!' };
-        statusEl.className = status;
-        statusEl.textContent = syncStatusMessages[status];
-    }
-    if (status === 'saved' || status === 'error') {
-        setTimeout(() => {
-            if (state.syncStatus === status) setSyncStatus('idle');
-        }, duration);
-    }
 }

@@ -61,4 +61,5 @@ export const state: AppState = {
     showFinalQuote: false,
     selectedDiscountId: 'none',
     isRestoringProfile: false,
+    globalQuantity: 1, // Default quantity
 };

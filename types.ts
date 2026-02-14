@@ -77,4 +77,5 @@ export interface AppState {
     showFinalQuote: boolean;
     selectedDiscountId: number | 'none';
     isRestoringProfile: boolean; // 新增：防止注册恢复期间被强制登出
+    globalQuantity: number; // 新增：全局设备数量
 }

@@ -24,37 +24,47 @@ export function attachLoginListeners() {
         // Fix: Trim password to remove accidental trailing spaces from copy-paste
         const password = (target.elements.namedItem('password') as HTMLInputElement).value.trim();
         const fullNameInput = target.querySelector('#fullname') as HTMLInputElement; // 仅注册模式存在
-        const loginButton = target.querySelector('.auth-button') as HTMLButtonElement;
+        
+        // Fix: Use generic type selector as class names may vary in UI updates
+        const loginButton = target.querySelector('button[type="submit"]') as HTMLButtonElement;
         const errorDiv = $('#login-error') as HTMLDivElement;
 
         // Reset error
-        errorDiv.style.display = 'none';
+        if (errorDiv) errorDiv.style.display = 'none';
 
         if (!usernameInput || !password) return;
 
         // 注册时的严格校验
         if (state.authMode === 'register') {
             if (!fullNameInput?.value.trim()) {
-                 errorDiv.textContent = '请输入您的真实姓名';
-                 errorDiv.style.display = 'block';
+                 if (errorDiv) {
+                     errorDiv.textContent = '请输入您的真实姓名';
+                     errorDiv.style.display = 'block';
+                 }
                  return;
             }
             // 校验用户名: 仅允许字母、数字、下划线 (如果用户直接输入了 @ 认为是高级用户或 legacy，跳过此校验)
             if (!usernameInput.includes('@') && !/^[a-zA-Z0-9_]+$/.test(usernameInput)) {
-                errorDiv.textContent = '用户名格式错误：仅允许使用英文字母、数字或下划线。';
-                errorDiv.style.display = 'block';
+                if (errorDiv) {
+                    errorDiv.textContent = '用户名格式错误：仅允许使用英文字母、数字或下划线。';
+                    errorDiv.style.display = 'block';
+                }
                 return;
             }
             // 校验密码: 长度 > 6
             if (password.length <= 6) {
-                errorDiv.textContent = '密码强度不足：长度必须大于 6 位。';
-                errorDiv.style.display = 'block';
+                if (errorDiv) {
+                    errorDiv.textContent = '密码强度不足：长度必须大于 6 位。';
+                    errorDiv.style.display = 'block';
+                }
                 return;
             }
         }
 
-        loginButton.disabled = true; 
-        loginButton.innerHTML = `<span class="spinner"></span> 正在处理`; 
+        if (loginButton) {
+            loginButton.disabled = true; 
+            loginButton.innerHTML = `<span class="spinner"></span> 正在处理`; 
+        }
         
         // 自动构建虚拟邮箱: zhangsan -> zhangsan@longsheng.local
         // 如果用户直接输入了包含 @ 的完整邮箱（如 admin@admin），则直接使用
@@ -148,8 +158,7 @@ export function attachLoginListeners() {
                             await supabase.auth.signOut(); // 登出清除会话
                         }
                     });
-                    // 注意：这里不调用 handleUserSession，也不释放 isRestoringProfile 锁（直到用户点击确认）
-                    // 这样可以保持 Modal 显示，直到用户手动处理
+                    // 注意：这里不调用 handleUserSession，也不释放 isRestoringProfile 锁（直到用户手动处理）
                     return; 
                 }
 
@@ -162,10 +171,14 @@ export function attachLoginListeners() {
         } catch (err: any) {
             console.error(err);
             state.isRestoringProfile = false; // 只有失败时才需要手动重置锁
-            errorDiv.textContent = err.message || '操作失败，请重试';
-            errorDiv.style.display = 'block';
-            loginButton.disabled = false; 
-            loginButton.innerHTML = state.authMode === 'login' ? '登录' : '注册并自动登录';
+            if (errorDiv) {
+                errorDiv.textContent = err.message || '操作失败，请重试';
+                errorDiv.style.display = 'block';
+            }
+            if (loginButton) {
+                loginButton.disabled = false; 
+                loginButton.innerHTML = state.authMode === 'login' ? '登录' : '注册并自动登录';
+            }
             // 如果处于异常登录状态，强制登出以清理环境
             await supabase.auth.signOut();
         }

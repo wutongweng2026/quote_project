@@ -128,58 +128,6 @@ function debounce<F extends (...args: any[]) => any>(func: F, waitFor: number) {
 export function attachAdminPanelListeners() {
     $('#back-to-quote-btn')?.addEventListener('click', () => { state.view = 'quote'; renderApp(); });
 
-    // --- Change Password Logic (Duplicated for Admin View) ---
-    $('#admin-change-password-btn')?.addEventListener('click', () => {
-        showModal({
-            title: '修改密码',
-            message: `
-                <div class="auth-input-group">
-                    <label style="display:block; margin-bottom:0.5rem; font-weight:500;">新密码</label>
-                    <input type="password" id="new-password" class="form-input" placeholder="请输入新密码 (至少6位)">
-                </div>
-                <div class="auth-input-group">
-                    <label style="display:block; margin-bottom:0.5rem; font-weight:500;">确认密码</label>
-                    <input type="password" id="confirm-password" class="form-input" placeholder="请再次输入新密码">
-                </div>
-            `,
-            showCancel: true,
-            confirmText: '确认修改',
-            onConfirm: async () => {
-                const newPassword = ($('#new-password') as HTMLInputElement).value.trim();
-                const confirmPassword = ($('#confirm-password') as HTMLInputElement).value.trim();
-                
-                if (!newPassword || !confirmPassword) {
-                    state.customModal.errorMessage = "请输入新密码。";
-                    return renderApp();
-                }
-                
-                if (newPassword.length < 6) {
-                    state.customModal.errorMessage = "新密码长度至少需要 6 位。";
-                    return renderApp();
-                }
-                
-                if (newPassword !== confirmPassword) {
-                    state.customModal.errorMessage = "两次输入的密码不一致。";
-                    return renderApp();
-                }
-                
-                const btn = $('#custom-modal-confirm-btn') as HTMLButtonElement;
-                btn.disabled = true;
-                btn.innerHTML = `<span class="spinner"></span> 处理中...`;
-
-                const { error } = await supabase.auth.updateUser({ password: newPassword });
-                
-                if (error) {
-                    state.customModal.errorMessage = `修改失败: ${error.message}`;
-                    renderApp();
-                } else {
-                    state.showCustomModal = false;
-                    showModal({ title: '修改成功', message: '您的密码已成功更新。', confirmText: '完成' });
-                }
-            }
-        });
-    });
-
     $('#quick-add-form')?.addEventListener('submit', async (e) => {
         e.preventDefault();
         const form = e.target as HTMLFormElement;
