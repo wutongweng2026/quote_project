@@ -1,4 +1,5 @@
 
+
 import { createClient } from '@supabase/supabase-js';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config';
 import type { AppState, SelectionState } from './types';
@@ -23,9 +24,13 @@ if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 export const getInitialSelection = (): SelectionState => ({
-    '主机': { model: '', quantity: 1 }, '内存': { model: '', quantity: 1 },
-    '硬盘1': { model: '', quantity: 1 }, '硬盘2': { model: '', quantity: 0 },
-    '显卡': { model: '', quantity: 1 }, '电源': { model: '', quantity: 1 },
+    '主机': { model: '', quantity: 1 }, 
+    'CPU': { model: '', quantity: 1 }, 
+    '内存': { model: '', quantity: 1 },
+    '硬盘1': { model: '', quantity: 1 }, 
+    '硬盘2': { model: '', quantity: 0 },
+    '显卡': { model: '', quantity: 1 }, 
+    '电源': { model: '', quantity: 1 },
     '显示器': { model: '', quantity: 1 }
 });
 
@@ -40,6 +45,7 @@ export const state: AppState = {
     selection: getInitialSelection(),
     customItems: [],
     newCategory: '',
+    isNewCategoryCustom: false, // Default to using selection if available
     specialDiscount: 0,
     markupPoints: 0,
     adminSearchTerm: '',

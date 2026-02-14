@@ -1,3 +1,5 @@
+
+
 import { state, supabase, getInitialSelection } from '../state';
 import { renderApp, showModal, updateTotalsUI } from '../ui';
 import { calculateTotals } from '../calculations';
@@ -40,18 +42,20 @@ function handleSmartRecommendation() {
     let bestCombo: Record<string, string> | null = null;
     let minDiff = budget > 0 ? Infinity : -Infinity;
 
+    // Updated combination logic to include CPU
     const combinations = (
         candidates['主机'] || [{model: '', price: 0}]).flatMap(h => 
+        (candidates['CPU'] || [{model: '', price: 0}]).flatMap(cpu => 
         (candidates['内存'] || [{model: '', price: 0}]).flatMap(r => 
         (candidates['硬盘'] || [{model: '', price: 0}]).flatMap(d1 => 
         (candidates['显卡'] || [{model: '', price: 0}]).flatMap(g => 
         (candidates['电源'] || [{model: '', price: 0}]).flatMap(p => 
         (candidates['显示器'] || [{model: '', price: 0}]).map(m => {
-            const combo = { '主机': h.model, '内存': r.model, '硬盘1': d1.model, '显卡': g.model, '电源': p.model, '显示器': m.model };
-            const price = h.price + r.price + d1.price + g.price + p.price + m.price;
+            const combo = { '主机': h.model, 'CPU': cpu.model, '内存': r.model, '硬盘1': d1.model, '显卡': g.model, '电源': p.model, '显示器': m.model };
+            const price = h.price + cpu.price + r.price + d1.price + g.price + p.price + m.price;
             return { combo, price };
         })
-    )))));
+    ))))));
 
     for (const { combo, price } of combinations) {
         if (budget > 0) {
@@ -117,6 +121,59 @@ export function attachQuoteToolListeners() {
     $('#calc-quote-btn')?.addEventListener('click', () => { state.showFinalQuote = true; renderApp(); });
     $('#special-discount-input')?.addEventListener('input', (e) => { state.specialDiscount = Math.max(0, Number((e.target as HTMLInputElement).value)); updateTotalsUI(); });
 
+    // --- Change Password Logic ---
+    $('#change-password-btn')?.addEventListener('click', () => {
+        showModal({
+            title: '修改密码',
+            message: `
+                <div class="auth-input-group">
+                    <label style="display:block; margin-bottom:0.5rem; font-weight:500;">新密码</label>
+                    <input type="password" id="new-password" class="form-input" placeholder="请输入新密码 (至少6位)">
+                </div>
+                <div class="auth-input-group">
+                    <label style="display:block; margin-bottom:0.5rem; font-weight:500;">确认密码</label>
+                    <input type="password" id="confirm-password" class="form-input" placeholder="请再次输入新密码">
+                </div>
+            `,
+            showCancel: true,
+            confirmText: '确认修改',
+            onConfirm: async () => {
+                const newPassword = ($('#new-password') as HTMLInputElement).value.trim();
+                const confirmPassword = ($('#confirm-password') as HTMLInputElement).value.trim();
+                
+                if (!newPassword || !confirmPassword) {
+                    state.customModal.errorMessage = "请输入新密码。";
+                    return renderApp();
+                }
+                
+                if (newPassword.length < 6) {
+                    state.customModal.errorMessage = "新密码长度至少需要 6 位。";
+                    return renderApp();
+                }
+                
+                if (newPassword !== confirmPassword) {
+                    state.customModal.errorMessage = "两次输入的密码不一致。";
+                    return renderApp();
+                }
+                
+                const btn = $('#custom-modal-confirm-btn') as HTMLButtonElement;
+                const originalText = btn.innerHTML;
+                btn.disabled = true;
+                btn.innerHTML = `<span class="spinner"></span> 处理中...`;
+
+                const { error } = await supabase.auth.updateUser({ password: newPassword });
+                
+                if (error) {
+                    state.customModal.errorMessage = `修改失败: ${error.message}`;
+                    renderApp(); // Re-render to show error message (and reset button state via full re-render)
+                } else {
+                    state.showCustomModal = false;
+                    showModal({ title: '修改成功', message: '您的密码已成功更新。', confirmText: '完成' });
+                }
+            }
+        });
+    });
+
     // Consolidated listeners for the data table
     const dataTable = $('.data-table');
     if (dataTable) {
@@ -128,6 +185,13 @@ export function attachQuoteToolListeners() {
             if (target.id === 'new-category-input') {
                 state.newCategory = target.value;
                 return;
+            }
+
+            // Also support direct text input for custom model (if no models in DB)
+            if (target.classList.contains('custom-model-input')) {
+                const customId = Number(row.dataset.customId);
+                const item = state.customItems.find(i => i.id === customId);
+                if (item) { item.model = target.value; }
             }
 
             const quantity = Math.max(0, parseInt(target.value, 10) || 0);
@@ -148,9 +212,51 @@ export function attachQuoteToolListeners() {
             const row = target.closest('tr');
             if (!row) return;
 
+            if (target.id === 'new-category-select') {
+                const val = target.value;
+                if (val === 'custom') {
+                    state.isNewCategoryCustom = true;
+                    state.newCategory = ''; // Clear for user to type
+                } else {
+                    state.isNewCategoryCustom = false;
+                    state.newCategory = val; // Set the selected category
+                }
+                renderApp(); // Re-render to show/hide input
+                return;
+            }
+
             if (target.classList.contains('model-select')) {
                 const category = row.dataset.category;
-                if (category && state.selection[category]) { state.selection[category].model = target.value; }
+                if (category && state.selection[category]) { 
+                    state.selection[category].model = target.value; 
+
+                    // 关键修复: 当选择"主机"时，强制重绘应用
+                    // 目的: 触发 ui.ts 中的 renderConfigRow 逻辑，使其他配件列表根据新主机的 compatible_hosts 进行过滤
+                    if (category === '主机') {
+                        const newHost = target.value;
+                        
+                        // 额外优化: 如果切换了主机，检查当前已选的其他配件是否还兼容
+                        // 如果不兼容，自动重置该配件的选择，防止"幽灵数据" (UI上看不见但计入了总价)
+                        Object.keys(state.selection).forEach(key => {
+                            if (key === '主机') return;
+                            const currentModel = state.selection[key].model;
+                            if (!currentModel) return;
+
+                            const dataCat = key.startsWith('硬盘') ? '硬盘' : key;
+                            const item = state.priceData.items.find(i => i.category === dataCat && i.model === currentModel);
+
+                            if (item && item.compatible_hosts && item.compatible_hosts.length > 0) {
+                                // 如果该配件有兼容性限制，且新选的主机不在兼容列表中 -> 重置
+                                if (newHost && !item.compatible_hosts.includes(newHost)) {
+                                    state.selection[key].model = '';
+                                }
+                            }
+                        });
+
+                        renderApp();
+                        return; // renderApp 会重新生成DOM，不需要后续的 updateTotalsUI
+                    }
+                }
             } else if (target.classList.contains('custom-model-select')) {
                 const customId = Number(row.dataset.customId);
                 const item = state.customItems.find(i => i.id === customId);
@@ -167,11 +273,15 @@ export function attachQuoteToolListeners() {
             if (button.id === 'add-category-btn') {
                 const categoryName = state.newCategory.trim();
                 if (!categoryName) {
-                    return showModal({ title: '输入错误', message: '请输入新类别的名称。' });
+                    return showModal({ title: '输入错误', message: '请选择或输入新类别的名称。' });
                 }
                 const newId = state.customItems.length > 0 ? Math.max(...state.customItems.map(item => item.id)) + 1 : 1;
                 state.customItems.push({ id: newId, category: categoryName, model: '', quantity: 1 });
+                
+                // Reset add row state
                 state.newCategory = '';
+                state.isNewCategoryCustom = false;
+                
                 renderApp();
             } else if (button.classList.contains('remove-custom-item-btn')) {
                 const row = button.closest('tr');

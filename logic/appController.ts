@@ -6,7 +6,8 @@ import { seedDataObject } from '../seedData';
 import type { DbProfile, Prices, DbQuoteItem } from '../types';
 import type { Session } from '@supabase/supabase-js';
 
-const CACHE_KEY = 'qqs_price_data_cache_v1';
+// Bump cache version to force fresh fetch with new parsing logic
+const CACHE_KEY = 'qqs_price_data_cache_v2';
 
 export async function seedDatabaseIfNeeded() {
     try {
@@ -46,9 +47,29 @@ export async function seedDatabaseIfNeeded() {
     }
 }
 
+// Helper to safely parse compatible_hosts which might be a JSON string from DB
+function normalizeQuoteItem(item: any): DbQuoteItem {
+    let hosts = item.compatible_hosts;
+    // If DB column is 'text' but contains JSON array string (e.g. '["A","B"]'), parse it.
+    if (typeof hosts === 'string') {
+        try {
+            const parsed = JSON.parse(hosts);
+            if (Array.isArray(parsed)) {
+                hosts = parsed;
+            }
+        } catch (e) {
+            // Not JSON, keep as is or treat as empty if strictly required
+        }
+    }
+    return {
+        ...item,
+        compatible_hosts: Array.isArray(hosts) ? hosts : null
+    };
+}
 
 export async function loadAllData(): Promise<boolean> {
     try {
+        // Attempt to fetch timestamp. Ignore error if table doesn't exist yet (will just fetch fresh data).
         const { data: metaData } = await supabase
             .from('quote_meta')
             .select('value')
@@ -62,7 +83,7 @@ export async function loadAllData(): Promise<boolean> {
             if (cache.timestamp === remoteTimestamp) {
                 console.log('⚡ Using local price data cache...');
                 Object.assign(state.priceData, {
-                    items: cache.items,
+                    items: cache.items, // Cache assumes items are already normalized
                     prices: cache.prices,
                     tieredDiscounts: cache.tieredDiscounts,
                     markupPoints: cache.markupPoints
@@ -81,8 +102,10 @@ export async function loadAllData(): Promise<boolean> {
 
         if (itemsError || discountsError || markupsError) throw itemsError || discountsError || markupsError;
 
-        state.priceData.items = (itemsData as DbQuoteItem[]) || [];
-        state.priceData.prices = (itemsData || []).reduce((acc, item) => {
+        // Apply normalization here
+        state.priceData.items = (itemsData as any[] || []).map(normalizeQuoteItem);
+        
+        state.priceData.prices = (state.priceData.items || []).reduce((acc, item) => {
             if (!acc[item.category]) acc[item.category] = {};
             acc[item.category][item.model] = item.price;
             return acc;
@@ -104,6 +127,7 @@ export async function loadAllData(): Promise<boolean> {
             return false;
         }
         
+        console.error("Data load failed:", error);
         state.appStatus = 'error';
         state.errorMessage = `<h3 style="color: #b91c1c;">数据加载失败</h3><p>无法初始化报价数据。</p><p>错误: ${error.message}</p>`;
         return false;
@@ -115,41 +139,40 @@ export async function checkAndFixDbSchema() {
     state.hasAttemptedDbFix = true;
 
     try {
-        const { error } = await supabase.from('quote_items').select('is_priority').limit(1);
+        const { error } = await supabase.from('quote_items').select('is_priority, compatible_hosts').limit(1);
 
-        if (!error) return; // Column exists, no problem.
+        if (!error) return; // All columns exist, no problem.
 
         const errMessage = error.message.toLowerCase();
+        let missingColumn = '';
+        let missingType = '';
+        let defaultValue = '';
 
-        if (errMessage.includes('column "is_priority" does not exist')) {
+        if (errMessage.includes('is_priority')) {
+            missingColumn = 'is_priority'; missingType = 'bool'; defaultValue = 'false';
+        } else if (errMessage.includes('compatible_hosts')) {
+            missingColumn = 'compatible_hosts'; missingType = 'text[] (Array of Text)'; defaultValue = 'NULL';
+        }
+
+        if (missingColumn) {
             showModal({
                 title: '数据库需更新',
                 message: `
-                    <p>系统检测到您的 "quote_items" 表缺少 <strong>is_priority</strong> 字段，这是“优先推荐”功能所必需的。</p>
+                    <p>系统检测到您的 "quote_items" 表缺少 <strong>${missingColumn}</strong> 字段。</p>
                     <p>请按以下步骤在 Supabase 中添加该字段：</p>
                     <ol style="text-align: left; padding-left: 20px; line-height: 1.8;">
                         <li>登录 Supabase，进入项目的 "Table Editor"。</li>
                         <li>选择 "quote_items" 表。</li>
                         <li>点击 "+ Add column"。</li>
-                        <li>名称: <strong>is_priority</strong></li>
-                        <li>类型: <strong>bool</strong></li>
-                        <li>默认值: <strong>false</strong></li>
+                        <li>名称: <strong>${missingColumn}</strong></li>
+                        <li>类型: <strong>${missingType}</strong></li>
+                        ${defaultValue !== 'NULL' ? `<li>默认值: <strong>${defaultValue}</strong></li>` : ''}
                         <li>点击 "Save" 保存。</li>
                     </ol>
                     <p>添加成功后，请<strong>刷新本页面</strong>以应用更改。</p>
                 `,
                 confirmText: '好的',
                 isDismissible: false,
-            });
-        } else if (errMessage.includes('could not find the')) {
-            showModal({
-                title: '数据库缓存问题',
-                message: `
-                    <p>应用无法访问 "is_priority" 字段，这可能是由于数据库的元数据缓存未更新。</p>
-                    <p>请尝试在 Supabase 项目的 "API Docs" 页面，点击 "Reload schema" 按钮，然后刷新本页面。</p>
-                    <p>如果问题仍存在，请检查 "quote_items" 表的行级安全策略 (RLS) 是否允许您的角色访问 "is_priority" 字段。</p>
-                `,
-                confirmText: '好的',
             });
         }
     } catch (e) {
@@ -285,24 +308,37 @@ export async function handleUserSession(session: Session | null) {
     renderApp();
 }
 
+export function initializeApp() {
+    // Initial Render
+    renderApp();
 
-export async function initializeApp() {
-    // Listen for future auth changes (login/logout)
-    supabase.auth.onAuthStateChange(async (event, session) => {
-        // We only care about SIGNED_IN and SIGNED_OUT events to avoid redundant runs
-        if (event === 'SIGNED_IN' || event === 'SIGNED_OUT') {
-            await handleUserSession(session);
+    // 1. Manually check session first to prevent hang if listener doesn't fire immediately
+    supabase.auth.getSession().then(async ({ data, error }) => {
+        if (error) {
+            console.error("Session check error:", error);
+            // Fallback to login
+            state.currentUser = null;
+            state.view = 'login';
+            state.appStatus = 'ready';
+            renderApp();
+            return;
         }
-    });
 
-    // Check the initial session state on page load
-    try {
-        const { data: { session } } = await supabase.auth.getSession();
-        await handleUserSession(session);
-    } catch(err: any) {
-        console.error("Critical initialization error:", err);
-        state.appStatus = 'error';
-        state.errorMessage = `初始化严重错误: ${err.message}`;
-        renderApp();
-    }
+        await handleUserSession(data.session);
+
+        // 2. Listen for auth changes
+        supabase.auth.onAuthStateChange(async (event, session) => {
+            if (event === 'SIGNED_OUT') {
+                state.currentUser = null;
+                state.view = 'login';
+                state.appStatus = 'ready';
+                renderApp();
+            } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+                 // Avoid duplicate processing if we just did it via getSession
+                 if (session?.user?.id !== state.currentUser?.id) {
+                     await handleUserSession(session);
+                 }
+            }
+        });
+    });
 }

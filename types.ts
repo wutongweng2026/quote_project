@@ -1,4 +1,5 @@
 
+
 import type { User as AuthUser } from '@supabase/supabase-js';
 
 export interface PriceDataItem { [model: string]: number; }
@@ -11,6 +12,7 @@ export interface DbQuoteItem {
     model: string; 
     price: number; 
     is_priority: boolean; // Added priority flag
+    compatible_hosts?: string[] | null; // Added compatibility list
 }
 export interface DbDiscount { id: number; threshold: number; rate: number; }
 export interface DbMarkupPoint { id: number; alias: string; value: number; }
@@ -62,6 +64,7 @@ export interface AppState {
     selection: SelectionState;
     customItems: CustomItem[];
     newCategory: string;
+    isNewCategoryCustom: boolean; // Added: toggle between select and custom input
     specialDiscount: number;
     markupPoints: number;
     adminSearchTerm: string;

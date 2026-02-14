@@ -141,6 +141,7 @@ function renderQuoteTool() {
                     ${isAdmin ? '<button class="header-btn" id="login-log-btn" title="查看登录日志">登录日志</button>' : ''}
                     ${isAdmin ? '<button class="header-btn" id="user-management-btn" title="管理用户权限">用户管理</button>' : ''}
                     ${(isAdmin || isManager) ? '<button class="header-btn" id="app-view-toggle-btn" title="管理价格与配置">后台管理</button>' : ''}
+                   <button class="header-btn" id="change-password-btn" title="修改当前登录密码">修改密码</button>
                    <button class="header-btn" id="logout-btn">退出</button>
                </div>
            </header>
@@ -210,7 +211,36 @@ function renderQuoteTool() {
 
 function renderConfigRow(category: string) {
     const dataCategory = category.startsWith('硬盘') ? '硬盘' : category;
-    const models = state.priceData.prices[dataCategory] || {};
+    
+    // Get all items for this category
+    const allItems = state.priceData.items.filter(i => i.category === dataCategory);
+    
+    // Get currently selected host model to filter compatibility
+    const selectedHostModel = state.selection['主机']?.model;
+    
+    // Filter logic:
+    // 1. If category is '主机', show all options.
+    // 2. If no host is selected, show all options (or universal ones). Here we show all to be safe.
+    // 3. If host is selected, check 'compatible_hosts'.
+    //    - If compatible_hosts is null/empty -> Universal item, show it.
+    //    - If compatible_hosts has values -> Show only if selected host is in the list.
+    const filteredItems = allItems.filter(item => {
+        if (dataCategory === '主机') return true;
+        
+        // If no specific host is selected, we could show everything, OR show only universal items.
+        // Usually, users want to see everything until they narrow it down.
+        if (!selectedHostModel) return true;
+        
+        if (!item.compatible_hosts || item.compatible_hosts.length === 0) {
+            return true; // Universal item
+        }
+        
+        return item.compatible_hosts.includes(selectedHostModel);
+    });
+
+    // Extract models and sort
+    const availableModels = filteredItems.map(i => i.model).sort();
+    
     const currentSelection = state.selection[category];
     return `
        <tr data-category="${category}">
@@ -218,7 +248,7 @@ function renderConfigRow(category: string) {
            <td>
                <select class="form-select model-select">
                    <option value="">-- 请选择 --</option>
-                   ${Object.keys(models).sort().map(model => `<option value="${model}" ${currentSelection.model === model ? 'selected' : ''}>${model}</option>`).join('')}
+                   ${availableModels.map(model => `<option value="${model}" ${currentSelection.model === model ? 'selected' : ''}>${model}</option>`).join('')}
                </select>
            </td>
            <td> <input type="number" class="form-input quantity-input" min="0" value="${currentSelection.quantity}" /> </td>
@@ -229,14 +259,21 @@ function renderConfigRow(category: string) {
 
 function renderCustomItemRow(item: CustomItem) {
     const models = state.priceData.prices[item.category] || {};
+    const modelKeys = Object.keys(models);
+    const hasModels = modelKeys.length > 0;
+
     return `
        <tr data-custom-id="${item.id}">
            <td>${item.category}</td>
            <td>
+               ${hasModels ? `
                <select class="form-select custom-model-select">
                    <option value="">-- 请选择 --</option>
-                   ${Object.keys(models).sort().map(model => `<option value="${model}" ${item.model === model ? 'selected' : ''}>${model}</option>`).join('')}
+                   ${modelKeys.sort().map(model => `<option value="${model}" ${item.model === model ? 'selected' : ''}>${model}</option>`).join('')}
                </select>
+               ` : `
+               <input type="text" class="form-input custom-model-input" placeholder="请输入型号" value="${item.model}" />
+               `}
            </td>
            <td> <input type="number" class="form-input custom-quantity-input" min="0" value="${item.quantity}" /> </td>
            <td> <button class="btn btn-danger remove-custom-item-btn" title="删除此行">&times;</button> </td>
@@ -245,10 +282,42 @@ function renderCustomItemRow(item: CustomItem) {
 }
 
 function renderAddCategoryRow() {
+    // Identify available categories in backend that are NOT in the standard config
+    const standardCategories = ['主机', 'CPU', '内存', '硬盘', '显卡', '电源', '显示器'];
+    // '硬盘' in DB covers '硬盘1','硬盘2' in standard config, so we exclude it safely by name match.
+    // If DB has categories like '机箱', '键盘' etc., they will appear here.
+    
+    const allCategories = Array.from(new Set(state.priceData.items.map(i => i.category)));
+    const extraCategories = allCategories.filter(c => !standardCategories.includes(c));
+    
+    // Logic: 
+    // If we have extra categories, show a select box. 
+    // Include a "Custom" option in the select box.
+    // If "Custom" is selected (or no extras exist), show the input box.
+    
+    const hasExtras = extraCategories.length > 0;
+    const showInput = !hasExtras || state.isNewCategoryCustom;
+
+    let selectorHtml = '';
+    if (hasExtras) {
+        selectorHtml = `
+            <select id="new-category-select" class="form-select" style="flex: 1; min-width: 140px; margin-right: 0.5rem;">
+                <option value="">-- 选择配件类型 --</option>
+                ${extraCategories.map(c => `<option value="${c}" ${(!state.isNewCategoryCustom && state.newCategory === c) ? 'selected' : ''}>${c}</option>`).join('')}
+                <option value="custom" ${state.isNewCategoryCustom ? 'selected' : ''}>✎ 自定义输入...</option>
+            </select>
+        `;
+    }
+
     return `
        <tr id="add-category-row" style="background-color: var(--secondary-color);">
            <td style="color: var(--text-color-secondary); font-weight: 500;">+ 添加新类别</td>
-           <td> <input type="text" id="new-category-input" class="form-input" placeholder="输入类别名称 (例如: 机箱风扇)" value="${state.newCategory}" /> </td>
+           <td> 
+               <div style="display: flex; align-items: center; width: 100%;">
+                   ${selectorHtml}
+                   ${showInput ? `<input type="text" id="new-category-input" class="form-input" placeholder="输入类别名称 (例如: 机箱风扇)" value="${state.newCategory}" style="flex: 1;" autofocus />` : ''}
+               </div>
+           </td>
            <td></td>
            <td> <button id="add-category-btn" class="btn btn-primary" style="width: 100%;">确认添加</button> </td>
        </tr>
@@ -278,6 +347,7 @@ export function renderAdminDataTableBody() {
             </td>
             <td class="actions-cell">
                 <button class="btn btn-primary admin-save-item-btn">保存</button>
+                <button class="btn btn-info admin-adapter-btn" data-id="${item.id}">适配</button>
                 <button class="btn btn-danger admin-delete-item-btn" data-category="${item.category}" data-model="${item.model}">删除</button>
             </td>
         </tr>`
@@ -290,6 +360,7 @@ function renderAdminPanel() {
        <header class="app-header">
            <h2>系统管理后台</h2>
            <div class="header-actions">
+               <button id="admin-change-password-btn" class="header-btn">修改密码</button>
                <button id="back-to-quote-btn" class="header-btn">返回报价首页</button>
            </div>
        </header>
@@ -338,8 +409,16 @@ function renderAdminPanel() {
                    </form>
                    <div class="import-section" style="margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px dashed var(--border-color);">
                        <input type="file" id="import-file-input" accept=".xlsx, .xls" style="display: none;" />
-                       <button id="import-excel-btn" class="btn btn-ghost" style="border: 1px dashed var(--border-color); width: 100%;">📄 从 Excel 批量导入配件库</button>
-                       <span id="file-name-display" style="margin-left: 1rem; color: var(--text-color-secondary);"></span>
+                       <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                            <button id="export-excel-btn" class="btn btn-secondary" style="border: 1px dashed var(--border-color); justify-content: center;">📤 导出配件 (Excel)</button>
+                            <button id="import-excel-btn" class="btn btn-ghost" style="border: 1px dashed var(--border-color); justify-content: center;">📄 导入更新 (Excel)</button>
+                       </div>
+                       <div style="margin-top: 0.8rem; font-size: 0.85rem; color: var(--text-color-secondary);">
+                           <span id="file-name-display"></span>
+                           <p style="margin: 0.5rem 0 0 0; line-height: 1.4;">
+                               💡 <strong>提示:</strong> 您可以先点击“导出”，在 Excel 中修改价格或添加新行（保持分类、型号、价格三列格式），然后重新“导入”以批量更新系统数据。
+                           </p>
+                       </div>
                    </div>
                </div>
            </div>
