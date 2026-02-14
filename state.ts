@@ -1,5 +1,6 @@
 
 
+
 import { createClient } from '@supabase/supabase-js';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config';
 import type { AppState, SelectionState } from './types';
@@ -62,4 +63,5 @@ export const state: AppState = {
     selectedDiscountId: 'none',
     isRestoringProfile: false,
     globalQuantity: 1, // Default quantity
+    loginFormUsername: '', // Default empty
 };

@@ -1,5 +1,6 @@
 
 
+
 import { state, supabase } from '../state';
 import { renderApp, showModal, setSyncStatus, renderAdminDataTableBody } from '../ui';
 import type { PostgrestError } from '@supabase/supabase-js';
@@ -10,7 +11,7 @@ const $ = (selector: string) => document.querySelector(selector);
 
 async function updateLastUpdatedTimestamp() {
     const newTimestamp = new Date().toISOString();
-    localStorage.removeItem('qqs_price_data_cache_v2'); // Invalidate new cache key
+    localStorage.removeItem('qqs_price_data_cache_v3'); // Invalidate new cache key
     const { error } = await supabase.from('quote_meta').upsert({
         key: 'last_prices_updated',
         value: newTimestamp
@@ -36,9 +37,14 @@ async function refreshItemsData() {
         if (typeof hosts === 'string') {
             try { hosts = JSON.parse(hosts); } catch {}
         }
+        let scenarios = item.application_scenarios;
+        if (typeof scenarios === 'string') {
+            try { scenarios = JSON.parse(scenarios); } catch {}
+        }
         return {
             ...item,
-            compatible_hosts: Array.isArray(hosts) ? hosts : null
+            compatible_hosts: Array.isArray(hosts) ? hosts : null,
+            application_scenarios: Array.isArray(scenarios) ? scenarios : null
         };
     });
 
@@ -348,6 +354,56 @@ export function attachAdminPanelListeners() {
                         state.showCustomModal = false;
                         await updateLastUpdatedTimestamp();
                         renderApp();
+                    }
+                }
+            });
+        }
+        
+        // --- Scenario Logic ---
+        if (button?.classList.contains('admin-scenario-btn')) {
+            const row = button.closest('tr');
+            if (!row) return;
+            const itemId = parseInt(row.dataset.id || '');
+            const model = row.dataset.model || '主机';
+            
+            const targetItem = state.priceData.items.find(i => i.id === itemId);
+            if (!targetItem) return;
+
+            const existingScenarios = (targetItem.application_scenarios || []).join(', ');
+
+            showModal({
+                title: `设置应用场景 - ${model}`,
+                message: `
+                    <div style="text-align: left;">
+                        <p style="margin-bottom: 0.5rem; font-size: 0.9rem; color: #666;">
+                            请填写适合此主机的应用场景关键字，用于前台AI模糊匹配。<br>
+                            多个场景请用<strong>逗号</strong>分隔。
+                        </p>
+                        <textarea id="scenario-input" class="form-input" style="height: 100px; resize: vertical;" placeholder="例如: 机器学习, 4K剪辑, 3D渲染, 深度学习">${existingScenarios}</textarea>
+                    </div>
+                `,
+                showCancel: true,
+                confirmText: '保存场景',
+                onConfirm: async () => {
+                    const inputVal = ($('#scenario-input') as HTMLTextAreaElement).value;
+                    // Split by comma/newline, trim, remove empty
+                    const scenarios = inputVal.split(/[,，\n]/).map(s => s.trim()).filter(s => s.length > 0);
+                    
+                    // Update State
+                    targetItem.application_scenarios = scenarios.length > 0 ? scenarios : null;
+
+                    // Update DB
+                    const { error } = await supabase.from('quote_items')
+                        .update({ application_scenarios: scenarios.length > 0 ? scenarios : null })
+                        .eq('id', itemId);
+                    
+                    if (error) {
+                        handleRlsError(error, '保存场景');
+                    } else {
+                        state.showCustomModal = false;
+                        await updateLastUpdatedTimestamp();
+                        // No need to full re-render app, scenarios are hidden
+                        showModal({ title: '保存成功', message: '应用场景已更新。', confirmText: '确定' });
                     }
                 }
             });

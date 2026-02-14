@@ -1,5 +1,6 @@
 
 
+
 import { state } from './state';
 import { calculateTotals, getFinalConfigText } from './calculations';
 import type { CustomItem, CustomModalState, AppState } from './types';
@@ -92,7 +93,7 @@ function renderLoginView() {
            <form id="login-form">
                <div style="margin-bottom: 1.25rem;">
                    <label for="username" style="display: block; margin-bottom: 0.5rem; font-weight: 500; font-size: 0.875rem; color: var(--text-700);">用户名</label>
-                   <input type="text" id="username" name="username" class="form-input" required autocomplete="username" placeholder="用户名如：zhangsan">
+                   <input type="text" id="username" name="username" class="form-input" required autocomplete="username" placeholder="用户名如：zhangsan" value="${state.loginFormUsername || ''}">
                    ${isRegister ? `<small style="color: var(--text-500); font-size: 0.75rem; margin-top: 4px; display: block;">* 仅支持英文字母、数字或下划线</small>` : ''}
                </div>
                
@@ -211,7 +212,7 @@ function renderQuoteTool() {
                    </div>
                    
                    <div style="position: relative; margin-top: 1rem;">
-                       <input type="text" id="matcher-input" style="width: 100%; height: 4rem; padding-left: 1.5rem; padding-right: 9rem; border-radius: 1rem; border: 1px solid var(--border-color); font-size: 1rem; box-shadow: 0 2px 5px rgba(0,0,0,0.02);" placeholder="例如：4K视频剪辑与机器学习工作站...">
+                       <input type="text" id="matcher-input" style="width: 100%; height: 4rem; padding-left: 1.5rem; padding-right: 9rem; border-radius: 1rem; border: 1px solid var(--border-color); font-size: 1rem; box-shadow: 0 2px 5px rgba(0,0,0,0.02);" placeholder="">
                        <button id="match-config-btn" class="btn btn-primary" style="position: absolute; right: 0.5rem; top: 0.5rem; bottom: 0.5rem; padding: 0 1.5rem; border-radius: 0.75rem;">
                             一键生成 <span class="material-symbols-outlined" style="font-size: 1.1rem; margin-left: 4px;">bolt</span>
                        </button>
@@ -255,7 +256,7 @@ function renderQuoteTool() {
                         <div>
                             <label for="discount-select" class="text-xs-bold text-muted" style="display: block; margin-bottom: 0.5rem;">折扣优惠</label>
                             <select id="discount-select" class="form-select">
-                                <option value="none" ${state.selectedDiscountId === 'none' ? 'selected' : ''}>标准价格</option>
+                                <option value="none" ${state.selectedDiscountId === 'none' ? 'selected' : ''}>无折扣</option>
                                 ${state.priceData.tieredDiscounts.sort((a, b) => b.threshold - a.threshold).map(tier => `
                                     <option value="${tier.id}" ${state.selectedDiscountId === tier.id ? 'selected' : ''}>
                                         ${tier.threshold > 0 ? `满 ${tier.threshold} 台 (${tier.rate}折)` : `固定折扣: ${tier.rate}折`}
@@ -447,8 +448,9 @@ export function renderAdminDataTableBody() {
             </td>
             <td class="actions-cell" style="text-align: right;">
                 <div style="display: flex; gap: 0.5rem; justify-content: flex-end;">
-                    <button class="btn btn-secondary admin-save-item-btn" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;">保存</button>
+                    ${item.category === '主机' ? `<button class="btn btn-secondary admin-scenario-btn" style="padding: 0.4rem 0.8rem; font-size: 0.8rem; background-color: #f3e8ff; border-color: #d8b4fe; color: #6b21a8;">场景</button>` : ''}
                     <button class="btn btn-secondary admin-adapter-btn" data-id="${item.id}" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;">适配</button>
+                    <button class="btn btn-secondary admin-save-item-btn" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;">保存</button>
                     <button class="btn btn-icon admin-delete-item-btn" data-category="${item.category}" data-model="${item.model}" style="color: var(--danger-text);">
                         <span class="material-symbols-outlined" style="font-size: 1.2rem;">delete</span>
                     </button>

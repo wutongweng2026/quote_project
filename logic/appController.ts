@@ -1,5 +1,6 @@
 
 
+
 import { supabase, state } from '../state';
 import { renderApp, showModal } from '../ui';
 import { seedDataObject } from '../seedData';
@@ -7,7 +8,7 @@ import type { DbProfile, Prices, DbQuoteItem } from '../types';
 import type { Session } from '@supabase/supabase-js';
 
 // Bump cache version to force fresh fetch with new parsing logic
-const CACHE_KEY = 'qqs_price_data_cache_v2';
+const CACHE_KEY = 'qqs_price_data_cache_v3'; // Incremented version
 
 export async function seedDatabaseIfNeeded() {
     try {
@@ -47,23 +48,26 @@ export async function seedDatabaseIfNeeded() {
     }
 }
 
-// Helper to safely parse compatible_hosts which might be a JSON string from DB
-function normalizeQuoteItem(item: any): DbQuoteItem {
-    let hosts = item.compatible_hosts;
-    // If DB column is 'text' but contains JSON array string (e.g. '["A","B"]'), parse it.
-    if (typeof hosts === 'string') {
+// Helper to safely parse JSON or Array strings from DB
+function parseArrayField(value: any): string[] | null {
+    if (Array.isArray(value)) return value;
+    if (typeof value === 'string') {
         try {
-            const parsed = JSON.parse(hosts);
-            if (Array.isArray(parsed)) {
-                hosts = parsed;
-            }
+            const parsed = JSON.parse(value);
+            if (Array.isArray(parsed)) return parsed;
         } catch (e) {
-            // Not JSON, keep as is or treat as empty if strictly required
+            // Not JSON, return as is? No, expect array.
+            return null;
         }
     }
+    return null;
+}
+
+function normalizeQuoteItem(item: any): DbQuoteItem {
     return {
         ...item,
-        compatible_hosts: Array.isArray(hosts) ? hosts : null
+        compatible_hosts: parseArrayField(item.compatible_hosts),
+        application_scenarios: parseArrayField(item.application_scenarios)
     };
 }
 
@@ -139,7 +143,7 @@ export async function checkAndFixDbSchema() {
     state.hasAttemptedDbFix = true;
 
     try {
-        const { error } = await supabase.from('quote_items').select('is_priority, compatible_hosts').limit(1);
+        const { error } = await supabase.from('quote_items').select('is_priority, compatible_hosts, application_scenarios').limit(1);
 
         if (!error) return; // All columns exist, no problem.
 
@@ -152,6 +156,8 @@ export async function checkAndFixDbSchema() {
             missingColumn = 'is_priority'; missingType = 'bool'; defaultValue = 'false';
         } else if (errMessage.includes('compatible_hosts')) {
             missingColumn = 'compatible_hosts'; missingType = 'text[] (Array of Text)'; defaultValue = 'NULL';
+        } else if (errMessage.includes('application_scenarios')) {
+            missingColumn = 'application_scenarios'; missingType = 'text[] (Array of Text)'; defaultValue = 'NULL';
         }
 
         if (missingColumn) {

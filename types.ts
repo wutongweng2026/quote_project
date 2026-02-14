@@ -13,6 +13,7 @@ export interface DbQuoteItem {
     price: number; 
     is_priority: boolean; // Added priority flag
     compatible_hosts?: string[] | null; // Added compatibility list
+    application_scenarios?: string[] | null; // Added: AI matching scenarios
 }
 export interface DbDiscount { id: number; threshold: number; rate: number; }
 export interface DbMarkupPoint { id: number; alias: string; value: number; }
@@ -78,4 +79,5 @@ export interface AppState {
     selectedDiscountId: number | 'none';
     isRestoringProfile: boolean; // 新增：防止注册恢复期间被强制登出
     globalQuantity: number; // 新增：全局设备数量
+    loginFormUsername: string; // 新增：用于在登录失败重绘时保留用户名
 }

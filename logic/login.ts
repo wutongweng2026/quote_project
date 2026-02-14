@@ -1,5 +1,6 @@
 
 
+
 import { state, supabase } from '../state';
 import { renderApp, showModal } from '../ui';
 import { handleUserSession } from './appController';
@@ -25,6 +26,9 @@ export function attachLoginListeners() {
         const password = (target.elements.namedItem('password') as HTMLInputElement).value.trim();
         const fullNameInput = target.querySelector('#fullname') as HTMLInputElement; // 仅注册模式存在
         
+        // Save to state to preserve across re-renders (e.g. error modal)
+        state.loginFormUsername = usernameInput;
+
         // Fix: Use generic type selector as class names may vary in UI updates
         const loginButton = target.querySelector('button[type="submit"]') as HTMLButtonElement;
         const errorDiv = $('#login-error') as HTMLDivElement;
@@ -171,10 +175,15 @@ export function attachLoginListeners() {
         } catch (err: any) {
             console.error(err);
             state.isRestoringProfile = false; // 只有失败时才需要手动重置锁
-            if (errorDiv) {
-                errorDiv.textContent = err.message || '操作失败，请重试';
-                errorDiv.style.display = 'block';
-            }
+            
+            // Replaced inline error with Modal as requested
+            showModal({
+                title: state.authMode === 'login' ? '登录失败' : '注册失败',
+                message: err.message || '操作失败，请重试',
+                isDanger: true,
+                confirmText: '重试'
+            });
+
             if (loginButton) {
                 loginButton.disabled = false; 
                 loginButton.innerHTML = state.authMode === 'login' ? '登录' : '注册并自动登录';

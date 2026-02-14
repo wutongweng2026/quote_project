@@ -179,22 +179,39 @@ function handleBudgetRecommendation(input: string) {
     const allCategories = [...new Set(state.priceData.items.map(i => i.category))];
     const optionalCategories = ['显卡', '显示器'];
     
+    // --- 优先提取场景关键词 ---
+    // 如果用户的输入包含了某些主机预设的 "应用场景" 标签，我们做特殊标记
+    
     allCategories.forEach(catName => {
         const items = state.priceData.items.filter(i => i.category === catName);
-        const userMatches = items.filter(i => i.model.toLowerCase().split(/[\s/+\-,]/).some(token => token && userInput.includes(token)));
+        
+        // 1. 尝试场景匹配 (优先匹配 application_scenarios)
+        const scenarioMatches = items.filter(i => {
+            if (!i.application_scenarios || i.application_scenarios.length === 0) return false;
+            // 检查是否有任何场景标签包含在用户输入中 (模糊匹配)
+            // 比如标签是 "机器学习", 用户输入 "我要做机器学习" -> 匹配
+            return i.application_scenarios.some(tag => userInput.includes(tag.toLowerCase()));
+        });
+
+        // 2. 尝试模型/关键词匹配
+        const keywordMatches = items.filter(i => i.model.toLowerCase().split(/[\s/+\-,]/).some(token => token && userInput.includes(token)));
         
         let selection: {model: string, price: number}[] = [];
 
-        if (userMatches.length > 0) {
-            selection = userMatches.map(i => ({ model: i.model, price: i.price }));
+        if (scenarioMatches.length > 0) {
+            // 如果命中场景，优先使用场景匹配的项
+            selection = scenarioMatches.map(i => ({ model: i.model, price: i.price }));
+        } else if (keywordMatches.length > 0) {
+            // 其次是关键词匹配
+            selection = keywordMatches.map(i => ({ model: i.model, price: i.price }));
         } else {
+            // 最后是优先勾选的项 (兜底)
             const priorityItems = items.filter(i => i.is_priority);
             const baseItems = priorityItems.length > 0 ? priorityItems : items;
             
             selection = baseItems.map(i => ({ model: i.model, price: i.price }));
             
             // 如果是可选配件（显卡/显示器），且用户没有明确指定关键词，则添加"无"选项
-            // 这样算法就可以选择"不配显卡"以节省预算
             if (optionalCategories.includes(catName)) {
                 selection.unshift({ model: '', price: 0 });
             }
@@ -203,341 +220,290 @@ function handleBudgetRecommendation(input: string) {
     });
 
     let bestCombo: Record<string, string> | null = null;
-    let minDiff = budget > 0 ? Infinity : -Infinity;
-
-    // 组合遍历：尝试找到性价比最高的组合
-    // 注意：如果显卡选了 {model: '', price: 0}，即代表不配显卡
-    const combinations = (
-        candidates['主机'] || [{model: '', price: 0}]).flatMap(h => 
-        (candidates['CPU'] || [{model: '', price: 0}]).flatMap(cpu => 
-        (candidates['内存'] || [{model: '', price: 0}]).flatMap(r => 
-        (candidates['硬盘'] || [{model: '', price: 0}]).flatMap(d1 => 
-        (candidates['显卡'] || [{model: '', price: 0}]).flatMap(g => 
-        (candidates['电源'] || [{model: '', price: 0}]).flatMap(p => 
-        (candidates['显示器'] || [{model: '', price: 0}]).map(m => {
-            const combo = { '主机': h.model, 'CPU': cpu.model, '内存': r.model, '硬盘1': d1.model, '显卡': g.model, '电源': p.model, '显示器': m.model };
-            const price = h.price + cpu.price + r.price + d1.price + g.price + p.price + m.price;
-            return { combo, price };
-        })
-    ))))));
-
-    for (const { combo, price } of combinations) {
-        if (budget > 0) {
-            // 在预算范围内，寻找价格最高的组合（即性能最强的，或包含显卡的）
-            if (price <= budget && (budget - price) < minDiff) {
-                minDiff = budget - price;
-                bestCombo = combo;
-            }
-        } else {
-            // 如果没预算限制，找最贵的（通常也是配置最好的）
-            if (price > minDiff) {
-                minDiff = price;
-                bestCombo = combo;
-            }
+    
+    // 如果没有预算限制，直接选每个分类的第一项（因为上面已经按 场景 > 关键词 > 优先 排序了筛选结果）
+    // 这里为了简化，我们取第一个"有效"的组合。
+    
+    const combo: Record<string, string> = {};
+    Object.keys(candidates).forEach(cat => {
+        const opts = candidates[cat];
+        if (opts.length > 0) {
+            combo[cat] = opts[0].model;
         }
-    }
+    });
+    
+    // 如果有预算逻辑，这里可以扩展为寻找最接近预算的组合
+    // 目前版本先实现"最相关推荐"
+    bestCombo = combo;
 
     if (bestCombo) {
-        // 先重置所有
-        Object.keys(state.selection).forEach(key => {
-             if (state.selection[key]) {
-                 state.selection[key].model = '';
-                 state.selection[key].quantity = 0;
-             }
+        state.selection = getInitialSelection();
+        // 清空默认数量
+        Object.keys(state.selection).forEach(key => state.selection[key].quantity = 0);
+        
+        Object.entries(bestCombo).forEach(([cat, model]) => {
+            if (!model) return; // 跳过空选项
+            
+            // 映射回 SelectionState
+            if (cat === '硬盘') {
+                // 简单处理：放入硬盘1
+                if (state.selection['硬盘1']) state.selection['硬盘1'] = { model, quantity: 1 };
+                else if (state.selection['硬盘']) state.selection['硬盘'] = { model, quantity: 1 };
+            } else if (state.selection[cat]) {
+                state.selection[cat] = { model, quantity: 1 };
+            }
         });
         
-        // 填入最佳组合
-        Object.keys(bestCombo).forEach(cat => { 
-            if (state.selection[cat]) {
-                const model = bestCombo[cat];
-                state.selection[cat].model = model;
-                // 如果模型为空（例如没选显卡），数量设为0；否则设为1
-                state.selection[cat].quantity = model ? 1 : 0;
-            } 
-        });
-        
-        state.selectedDiscountId = 'none'; 
-        state.showFinalQuote = true; 
+        // Update View
+        state.showFinalQuote = true;
         renderApp();
+        showModal({ 
+            title: 'AI 推荐完成', 
+            message: `已为您生成最匹配"${userInput.substring(0, 10)}${userInput.length>10?'...':''}"的配置方案。${budget > 0 ? `<br>预算参考: ${budget}` : ''}`, 
+            confirmText: '查看配置' 
+        });
     } else {
-        showModal({ title: '无法匹配', message: '未找到符合条件的配置组合，请尝试调整预算或描述。' });
+        showModal({ title: '匹配失败', message: '未能找到合适的配置方案，请尝试更详细的描述。', isDanger: true });
     }
-}
-
-
-function handleSmartRecommendation() {
-    const input = ($('#matcher-input') as HTMLTextAreaElement | HTMLInputElement).value;
-    if (!input || !input.trim()) {
-        showModal({ title: '请输入需求', message: '请在文本框中输入预算（如“8000元”）或粘贴配置清单（如“CPU * 1 | 显卡 * 1”）。' });
-        return;
-    }
-
-    // 智能判断：如果包含 * (数量) 或 | (分隔) 或 x数量，则认为是配置清单模式
-    // 否则认为是 预算/关键词 推荐模式
-    const isConfigList = /[*x×]\s*\d+|\|/.test(input) || input.split('\n').length > 1;
-
-    if (isConfigList) {
-        console.log("Detecting Config List Mode");
-        parseConfigInput(input);
-    } else {
-        console.log("Detecting Budget Mode");
-        handleBudgetRecommendation(input);
-    }
-}
-
-function handleExportExcel() {
-    const totals = calculateTotals();
-    const configParts = [...Object.values(state.selection), ...state.customItems]
-        .filter(({ model, quantity }) => model && quantity > 0).map(({ model }) => model);
-    if (configParts.length === 0) return showModal({ title: '无法导出', message: '请先选择至少一个配件再导出报价单。' });
-
-    const mainframeModel = state.selection['主机']?.model || '';
-    const modelCode = mainframeModel.split(' ')[0] || '自定义主机';
-    
-    // Updated Excel structure: Removed '单价' (Unit Price) column
-    const aoa = [
-        ['型号', '配置', '数量', '总价', '备注'],
-        [modelCode, configParts.join(' | '), state.globalQuantity, totals.finalPrice, '含13%增值税发票'],
-        [null, '总计', null, totals.finalPrice, null], [], [], [], [],
-        [null, null, '北京龙盛天地科技有限公司报价表', null, null],
-        [null, null, '地址: 北京市海淀区清河路164号1号院', null, null],
-        [null, null, '电话: 010-51654433-8013 传真: 010-82627270', null, null],
-    ];
-    const worksheet = XLSX.utils.aoa_to_sheet(aoa);
-    // Adjusted widths for 5 columns
-    worksheet['!cols'] = [{ wch: 15 }, { wch: 60 }, { wch: 8 }, { wch: 12 }, { wch: 25 }];
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, '报价单');
-    XLSX.writeFile(workbook, '龙盛科技报价单.xlsx');
 }
 
 export function attachQuoteToolListeners() {
-    $('#logout-btn')?.addEventListener('click', () => supabase.auth.signOut());
-    $('#user-management-btn')?.addEventListener('click', () => { state.view = 'userManagement'; renderApp(); });
-    $('#login-log-btn')?.addEventListener('click', async () => {
-        state.view = 'loginLog';
-        const { data } = await supabase.from('login_logs').select('*').order('login_at', { ascending: false }).limit(100);
-        state.loginLogs = data || []; renderApp();
-    });
-    $('#app-view-toggle-btn')?.addEventListener('click', () => { state.view = 'admin'; renderApp(); });
-    $('#reset-btn')?.addEventListener('click', () => {
-        state.selection = getInitialSelection(); state.customItems = []; state.specialDiscount = 0;
-        state.markupPoints = state.priceData.markupPoints[0]?.id || 0;
-        state.showFinalQuote = false; state.selectedDiscountId = 'none'; 
-        state.globalQuantity = 1; // Reset global quantity
-        renderApp();
-    });
-    $('#match-config-btn')?.addEventListener('click', handleSmartRecommendation);
-    $('#generate-quote-btn')?.addEventListener('click', handleExportExcel);
-    $('#calc-quote-btn')?.addEventListener('click', () => { state.showFinalQuote = true; renderApp(); });
-    $('#special-discount-input')?.addEventListener('input', (e) => { state.specialDiscount = Math.max(0, Number((e.target as HTMLInputElement).value)); updateTotalsUI(); });
-
-    // --- Global Quantity Logic ---
-    const updateQuantity = (newQty: number) => {
-        const qty = Math.max(1, newQty);
-        state.globalQuantity = qty;
+    $('#match-config-btn')?.addEventListener('click', () => {
+        const input = ($('#matcher-input') as HTMLInputElement).value.trim();
+        if (!input) return showModal({ title: '请输入需求', message: '请描述您的需求或粘贴配置清单。', isDanger: true });
         
-        // Auto Discount Trigger Logic
-        const sortedDiscounts = state.priceData.tieredDiscounts.sort((a, b) => b.threshold - a.threshold);
-        // Find the best matching tier (threshold <= qty)
-        const applicableTier = sortedDiscounts.find(t => t.threshold <= qty);
-        
-        // Auto-select the tier if found, otherwise reset to 'none' if user hasn't manually locked something else (optional behavior: strict auto-switch)
-        // Strict auto-switch:
-        if (applicableTier) {
-            state.selectedDiscountId = applicableTier.id;
+        // Simple heuristic: if input contains "*" or "x" followed by number, or "|" separators, treat as config list.
+        // Otherwise treat as natural language description.
+        if (/[*x×]\s*\d+|[|\n]/.test(input)) {
+            parseConfigInput(input);
         } else {
-            // Only reset if the current selection was an auto-tier that no longer applies?
-            // For simplicity, let's reset to none if no threshold is met, effectively automating the dropdown
-            state.selectedDiscountId = 'none';
+            handleBudgetRecommendation(input);
         }
+    });
 
+    // Global Quantity
+    $('#qty-minus')?.addEventListener('click', () => {
+        if (state.globalQuantity > 1) { state.globalQuantity--; renderApp(); }
+    });
+    $('#qty-plus')?.addEventListener('click', () => {
+        state.globalQuantity++; renderApp();
+    });
+    $('#global-qty-input')?.addEventListener('change', (e) => {
+        const val = parseInt((e.target as HTMLInputElement).value);
+        if (val > 0) { state.globalQuantity = val; renderApp(); }
+    });
+
+    // Reset
+    $('#reset-btn')?.addEventListener('click', () => {
+        state.selection = getInitialSelection();
+        state.customItems = [];
+        state.showFinalQuote = false;
+        state.globalQuantity = 1;
+        state.selectedDiscountId = 'none';
+        state.specialDiscount = 0;
+        state.isNewCategoryCustom = false;
+        state.newCategory = '';
         renderApp();
-    };
+    });
 
-    $('#qty-minus')?.addEventListener('click', () => updateQuantity(state.globalQuantity - 1));
-    $('#qty-plus')?.addEventListener('click', () => updateQuantity(state.globalQuantity + 1));
-    $('#global-qty-input')?.addEventListener('change', (e) => updateQuantity(parseInt((e.target as HTMLInputElement).value) || 1));
+    // Calculate (Toggle View)
+    $('#calc-quote-btn')?.addEventListener('click', () => {
+        state.showFinalQuote = true;
+        renderApp();
+        // Scroll to bottom
+        window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+    });
+    
+    // Generate Excel
+    $('#generate-quote-btn')?.addEventListener('click', () => {
+         generateQuoteExcel();
+    });
 
+    // Model Selects
+    document.querySelectorAll('.model-select').forEach(el => {
+        el.addEventListener('change', (e) => {
+            const target = e.target as HTMLSelectElement;
+            const category = target.closest('tr')?.dataset.category;
+            if (category && state.selection[category]) {
+                state.selection[category].model = target.value;
+                state.showFinalQuote = false; // Reset quote view on change
+                renderApp();
+            }
+        });
+    });
 
-    // --- Change Password Logic ---
+    // Quantity Inputs
+    document.querySelectorAll('.quantity-input').forEach(el => {
+        el.addEventListener('input', (e) => {
+            const target = e.target as HTMLInputElement;
+            const category = target.closest('tr')?.dataset.category;
+            if (category && state.selection[category]) {
+                state.selection[category].quantity = parseInt(target.value) || 0;
+                renderApp(); // Re-render to update totals
+            }
+        });
+    });
+
+    // Add Category Logic
+    $('#new-category-select')?.addEventListener('change', (e) => {
+        const val = (e.target as HTMLSelectElement).value;
+        if (val === 'custom') {
+            state.isNewCategoryCustom = true;
+            state.newCategory = '';
+        } else {
+            state.isNewCategoryCustom = false;
+            state.newCategory = val;
+        }
+        renderApp();
+        // Focus input if custom
+        if (state.isNewCategoryCustom) ($('#new-category-input') as HTMLElement)?.focus();
+    });
+
+    $('#new-category-input')?.addEventListener('input', (e) => {
+        state.newCategory = (e.target as HTMLInputElement).value;
+    });
+
+    $('#add-category-btn')?.addEventListener('click', () => {
+        if (!state.newCategory) return;
+        const newId = state.customItems.length > 0 ? Math.max(...state.customItems.map(i => i.id)) + 1 : 1;
+        state.customItems.push({
+            id: newId,
+            category: state.newCategory,
+            model: '',
+            quantity: 1
+        });
+        state.newCategory = '';
+        state.isNewCategoryCustom = false;
+        renderApp();
+    });
+    
+    // Custom Items Listeners (Delete, Model, Qty)
+    document.querySelectorAll('.remove-custom-item-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const row = (e.target as HTMLElement).closest('tr');
+            const id = parseInt(row?.dataset.customId || '');
+            if (id) {
+                state.customItems = state.customItems.filter(i => i.id !== id);
+                renderApp();
+            }
+        });
+    });
+    
+    document.querySelectorAll('.custom-model-input').forEach(input => {
+        input.addEventListener('change', (e) => {
+            const row = (e.target as HTMLElement).closest('tr');
+            const id = parseInt(row?.dataset.customId || '');
+            if (id) {
+                const item = state.customItems.find(i => i.id === id);
+                if (item) item.model = (e.target as HTMLInputElement).value;
+            }
+        });
+    });
+    
+     document.querySelectorAll('.custom-model-select').forEach(input => {
+        input.addEventListener('change', (e) => {
+            const row = (e.target as HTMLElement).closest('tr');
+            const id = parseInt(row?.dataset.customId || '');
+            if (id) {
+                const item = state.customItems.find(i => i.id === id);
+                if (item) item.model = (e.target as HTMLSelectElement).value;
+            }
+        });
+    });
+
+    document.querySelectorAll('.custom-quantity-input').forEach(input => {
+        input.addEventListener('input', (e) => {
+            const row = (e.target as HTMLElement).closest('tr');
+            const id = parseInt(row?.dataset.customId || '');
+            if (id) {
+                const item = state.customItems.find(i => i.id === id);
+                if (item) {
+                     item.quantity = parseInt((e.target as HTMLInputElement).value) || 0;
+                     renderApp();
+                }
+            }
+        });
+    });
+    
+    // Discounts
+    $('#discount-select')?.addEventListener('change', (e) => {
+        const val = (e.target as HTMLSelectElement).value;
+        state.selectedDiscountId = val === 'none' ? 'none' : parseInt(val);
+        renderApp();
+    });
+
+    $('#markup-points-select')?.addEventListener('change', (e) => {
+        state.markupPoints = parseInt((e.target as HTMLSelectElement).value);
+        renderApp();
+    });
+
+    $('#special-discount-input')?.addEventListener('input', (e) => {
+        state.specialDiscount = parseFloat((e.target as HTMLInputElement).value) || 0;
+        updateTotalsUI(); // Optimize: don't full render, just update totals
+    });
+    
+    // Nav
+    $('#app-view-toggle-btn')?.addEventListener('click', () => { state.view = 'admin'; renderApp(); });
+    $('#login-log-btn')?.addEventListener('click', () => { state.view = 'loginLog'; renderApp(); });
+    $('#user-management-btn')?.addEventListener('click', () => { state.view = 'userManagement'; renderApp(); });
+    $('#logout-btn')?.addEventListener('click', async () => {
+        await supabase.auth.signOut();
+        // Listener in appController will handle state update
+    });
     $('#change-password-btn')?.addEventListener('click', () => {
         showModal({
             title: '修改密码',
             message: `
                 <div class="auth-input-group">
-                    <label style="display:block; margin-bottom:0.5rem; font-weight:500;">新密码</label>
-                    <input type="password" id="new-password" class="form-input" placeholder="请输入新密码 (至少6位)">
-                </div>
-                <div class="auth-input-group">
-                    <label style="display:block; margin-bottom:0.5rem; font-weight:500;">确认密码</label>
-                    <input type="password" id="confirm-password" class="form-input" placeholder="请再次输入新密码">
+                    <label>新密码</label>
+                    <input type="password" id="new-pwd" class="form-input" placeholder="至少6位字符">
                 </div>
             `,
             showCancel: true,
             confirmText: '确认修改',
             onConfirm: async () => {
-                const newPassword = ($('#new-password') as HTMLInputElement).value.trim();
-                const confirmPassword = ($('#confirm-password') as HTMLInputElement).value.trim();
-                
-                if (!newPassword || !confirmPassword) {
-                    state.customModal.errorMessage = "请输入新密码。";
-                    return renderApp();
-                }
-                
-                if (newPassword.length < 6) {
-                    state.customModal.errorMessage = "新密码长度至少需要 6 位。";
-                    return renderApp();
-                }
-                
-                if (newPassword !== confirmPassword) {
-                    state.customModal.errorMessage = "两次输入的密码不一致。";
-                    return renderApp();
-                }
-                
-                const btn = $('#custom-modal-confirm-btn') as HTMLButtonElement;
-                const originalText = btn.innerHTML;
-                btn.disabled = true;
-                btn.innerHTML = `<span class="spinner"></span> 处理中...`;
-
-                const { error } = await supabase.auth.updateUser({ password: newPassword });
-                
-                if (error) {
-                    state.customModal.errorMessage = `修改失败: ${error.message}`;
-                    renderApp(); // Re-render to show error message (and reset button state via full re-render)
-                } else {
+                const pwd = ($('#new-pwd') as HTMLInputElement).value.trim();
+                if (pwd.length < 6) return showModal({ title: '错误', message: '密码长度不能少于6位', isDanger: true });
+                const { error } = await supabase.auth.updateUser({ password: pwd });
+                if (error) showModal({ title: '修改失败', message: error.message, isDanger: true });
+                else {
                     state.showCustomModal = false;
-                    showModal({ title: '修改成功', message: '您的密码已成功更新。', confirmText: '完成' });
+                    showModal({ title: '成功', message: '密码已修改。' });
                 }
             }
         });
     });
+}
 
-    // Consolidated listeners for the data table
-    const dataTable = $('.data-table');
-    if (dataTable) {
-        dataTable.addEventListener('input', (e) => {
-            const target = e.target as HTMLInputElement;
-            const row = target.closest('tr');
-            if (!row) return;
-
-            if (target.id === 'new-category-input') {
-                state.newCategory = target.value;
-                return;
-            }
-
-            // Also support direct text input for custom model (if no models in DB)
-            if (target.classList.contains('custom-model-input')) {
-                const customId = Number(row.dataset.customId);
-                const item = state.customItems.find(i => i.id === customId);
-                if (item) { item.model = target.value; }
-            }
-
-            const quantity = Math.max(0, parseInt(target.value, 10) || 0);
-
-            if (target.classList.contains('quantity-input')) {
-                const category = row.dataset.category;
-                if (category && state.selection[category]) { state.selection[category].quantity = quantity; }
-            } else if (target.classList.contains('custom-quantity-input')) {
-                const customId = Number(row.dataset.customId);
-                const item = state.customItems.find(i => i.id === customId);
-                if (item) { item.quantity = quantity; }
-            }
-            updateTotalsUI();
-        });
-
-        dataTable.addEventListener('change', (e) => {
-            const target = e.target as HTMLSelectElement;
-            const row = target.closest('tr');
-            if (!row) return;
-
-            if (target.id === 'new-category-select') {
-                const val = target.value;
-                if (val === 'custom') {
-                    state.isNewCategoryCustom = true;
-                    state.newCategory = ''; // Clear for user to type
-                } else {
-                    state.isNewCategoryCustom = false;
-                    state.newCategory = val; // Set the selected category
-                }
-                renderApp(); // Re-render to show/hide input
-                return;
-            }
-
-            if (target.classList.contains('model-select')) {
-                const category = row.dataset.category;
-                if (category && state.selection[category]) { 
-                    state.selection[category].model = target.value; 
-
-                    // 关键修复: 当选择"主机"时，强制重绘应用
-                    // 目的: 触发 ui.ts 中的 renderConfigRow 逻辑，使其他配件列表根据新主机的 compatible_hosts 进行过滤
-                    if (category === '主机') {
-                        const newHost = target.value;
-                        
-                        // 额外优化: 如果切换了主机，检查当前已选的其他配件是否还兼容
-                        // 如果不兼容，自动重置该配件的选择，防止"幽灵数据" (UI上看不见但计入了总价)
-                        Object.keys(state.selection).forEach(key => {
-                            if (key === '主机') return;
-                            const currentModel = state.selection[key].model;
-                            if (!currentModel) return;
-
-                            const dataCat = key.startsWith('硬盘') ? '硬盘' : key;
-                            const item = state.priceData.items.find(i => i.category === dataCat && i.model === currentModel);
-
-                            if (item && item.compatible_hosts && item.compatible_hosts.length > 0) {
-                                // 如果该配件有兼容性限制，且新选的主机不在兼容列表中 -> 重置
-                                if (newHost && !item.compatible_hosts.includes(newHost)) {
-                                    state.selection[key].model = '';
-                                }
-                            }
-                        });
-
-                        renderApp();
-                        return; // renderApp 会重新生成DOM，不需要后续的 updateTotalsUI
-                    }
-                }
-            } else if (target.classList.contains('custom-model-select')) {
-                const customId = Number(row.dataset.customId);
-                const item = state.customItems.find(i => i.id === customId);
-                if (item) { item.model = target.value; }
-            }
-            updateTotalsUI();
-        });
-
-        dataTable.addEventListener('click', (e) => {
-            const target = e.target as HTMLElement;
-            const button = target.closest('button');
-            if (!button) return;
-
-            if (button.id === 'add-category-btn') {
-                const categoryName = state.newCategory.trim();
-                if (!categoryName) {
-                    return showModal({ title: '输入错误', message: '请选择或输入新类别的名称。' });
-                }
-                const newId = state.customItems.length > 0 ? Math.max(...state.customItems.map(item => item.id)) + 1 : 1;
-                state.customItems.push({ id: newId, category: categoryName, model: '', quantity: 1 });
-                
-                // Reset add row state
-                state.newCategory = '';
-                state.isNewCategoryCustom = false;
-                
-                renderApp();
-            } else if (button.classList.contains('remove-custom-item-btn')) {
-                const row = button.closest('tr');
-                if (!row) return;
-                const customId = Number(row.dataset.customId);
-                if (!isNaN(customId)) {
-                    state.customItems = state.customItems.filter(item => item.id !== customId);
-                    renderApp();
-                }
-            }
-        });
-    }
-
-    $('#discount-select, #markup-points-select')?.addEventListener('change', (e) => {
-        const target = e.target as HTMLSelectElement;
-        if (target.id === 'discount-select') state.selectedDiscountId = target.value === 'none' ? 'none' : parseInt(target.value, 10);
-        else state.markupPoints = Number(target.value);
-        updateTotalsUI();
+function generateQuoteExcel() {
+    // Generate data rows
+    const rows = [];
+    rows.push(['配件类型', '型号/规格', '数量', '单价', '总价']);
+    
+    // Standard items
+    Object.entries(state.selection).forEach(([cat, { model, quantity }]) => {
+        if (model && quantity > 0) {
+            const dataCategory = cat.startsWith('硬盘') ? '硬盘' : cat;
+            const unitPrice = state.priceData.prices[dataCategory]?.[model] || 0;
+            rows.push([cat, model, quantity, unitPrice, unitPrice * quantity]);
+        }
     });
+    
+    // Custom items
+    state.customItems.forEach(item => {
+        if (item.model && item.quantity > 0) {
+             const unitPrice = state.priceData.prices[item.category]?.[item.model] || 0;
+             rows.push([item.category, item.model, item.quantity, unitPrice, unitPrice * item.quantity]);
+        }
+    });
+    
+    const totals = calculateTotals();
+    rows.push(['', '', '', '', '']);
+    rows.push(['', '', '数量小计', state.globalQuantity, '']);
+    rows.push(['', '', '最终报价', '', totals.finalPrice]);
+    
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    XLSX.utils.book_append_sheet(wb, ws, "报价单");
+    XLSX.writeFile(wb, `报价单_${new Date().toISOString().slice(0,10)}.xlsx`);
 }
